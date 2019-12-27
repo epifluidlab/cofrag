@@ -22,7 +22,16 @@ get_corre_mat=function(distance_matrix){
   return(correlation_matrix)
 }
 
-#step2 calculate similarity
+#step2 make all NA value to 0
+NA2zero=function(input_matrix){
+  for(i in 1:ncol(input_matrix)){
+    NA_location=which(is.na(input_matrix[1:ncol(input_matrix),i])==TRUE)
+    input_matrix[NA_location,i]=0
+  }
+  return(input_matrix)
+}
+
+#step3 calculate similarity
 calculate_similarity=function(cfDNA_matrix,Hic_matrix,bin_size=500000,chr_name="chr22",Max_distance=500000*70){
   library(hicrep)
   chr_name=rep(chr_name,ncol(cfDNA_matrix))
