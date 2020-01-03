@@ -5,13 +5,10 @@ get_corre_mat=function(distance_matrix){
   correlation_matrix=matrix(c(rep(1,row_number),rep(1,col_number)),nrow = row_number,ncol = col_number)
   for (i in 1:nrow(distance_matrix)){
     i_distance=distance_matrix[i,1:ncol(distance_matrix)]
-    if(length(i_distance[!is.na(i_distance)])<3){
-      correlation_matrix[i,]=NA
-      next
-    }
     for (j in 1:ncol(distance_matrix)){
       j_distance=distance_matrix[1:nrow(distance_matrix),j]
-      if(length(j_distance[!is.na(j_distance)])<3){
+      ij_distance=i_distance+j_distance
+      if(length(ij_distance[!is.na(ij_distance)])<3){
         correlation_matrix[i,j]=NA
         next
       }
