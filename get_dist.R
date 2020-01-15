@@ -2,20 +2,20 @@
  data_filter=function(data,maps=0.75,mapq=30,whole_genome){
   data=data.frame(data$flag,data$pos,data$qwidth,data$mapq,data$isize)
   colnames(data)=c("flag","pos","qwidth","mapq","isize")
-  good_map_bam_location=c(which(data$flag==99), which(data$flag==83))
+  good_map_bam_location=c(which(data$flag==99), which(data$flag==83))#using one of pair and get correct mapping
   data=data[good_map_bam_location,]
-  high_mapq_location=which(data$mapq>mapq)
+  high_mapq_location=which(data$mapq>mapq)#remove low mapqulity 
   data=data[high_mapq_location,]
   fragment_mappability=whole_genome[data$pos]
-  useful_position=which(fragment_mappability>=maps)
+  useful_position=which(fragment_mappability>=maps)#remove low mappablity 
   fragment_length=abs(data$isize[useful_position])
   fragment_length1=fragment_length[-which(fragment_length>=10000)]
   return(fragment_length1)
 }
 
- #get distance matrix
+ #step1:get distance matrix
 cf_dist=function(file_name,chr_name,bw_file_name,maps=0.75,chr_size,mapq=30,cluster_core=20,binsize=500000,add_value=10^(-10)){
-  chr_bw_data=read.table(bw_file_name,row.names = 1,header = T)
+  chr_bw_data=read.table(bw_file_name,row.names = 1,header = T)#read bigwig file 
   high_mapp_location=which(chr_bw_data$score>=maps)
   high_mapp_data=chr_bw_data[high_mapp_location,]
   whole_genome=rep(0,chr_size)
@@ -30,7 +30,7 @@ cf_dist=function(file_name,chr_name,bw_file_name,maps=0.75,chr_size,mapq=30,clus
   library(doParallel)
   cl <- makeCluster(cluster_core)
   registerDoParallel(cl)
-  what=c("flag","pos", "isize","qwidth","mapq")
+  what=c("flag","pos", "isize","qwidth","mapq")#get what to read
   region_number=chr_size%/%binsize+1
   distance_matrix=NULL
   begin_position=1

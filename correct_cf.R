@@ -1,4 +1,4 @@
-#step1 get raw cfDNA obs data
+#step2 get raw cfDNA obs data
 raw_cf_obs=function(cfDNA_distance_matrix,Hic_obs_data,binsize=500000){
   cfDNA_distance_matrix=-cfDNA_distance_matrix
   cfDNA_distance_matrix=2000*(cfDNA_distance_matrix+10)
@@ -13,7 +13,7 @@ raw_cf_obs=function(cfDNA_distance_matrix,Hic_obs_data,binsize=500000){
   cfDNA_obs_data=data.frame(x_location*binsize,y_location*binsize,xy_value)
 }
 
-#step2: get corrected obs data
+#step3: get corrected obs data
 correct_cf_obs=function(cfDNA_obs_data,Hic_obs_data,title_name){
   library(ggplot2)
   Hic_distance=Hic_obs_data$V2-Hic_obs_data$V1
@@ -82,7 +82,7 @@ correct_cf_obs=function(cfDNA_obs_data,Hic_obs_data,title_name){
   return(cfDNA_obs_data)
 }
 
-#step3: get corrected matrix
+#step4: get corrected distance matrix
 cf_mat=function(cfDNA_obs_data,cfDNA_distance_matrix,binsize=500000){
   cfDNA_corrected_data_source=rep(NA,ncol(cfDNA_distance_matrix)*ncol(cfDNA_distance_matrix))
   cfDNA_corrected_distance_matrix=matrix(cfDNA_corrected_data_source,ncol(cfDNA_distance_matrix),ncol(cfDNA_distance_matrix))
