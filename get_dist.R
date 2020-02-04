@@ -9,7 +9,7 @@
   fragment_mappability=whole_genome[data$pos]
   useful_position=which(fragment_mappability>=maps)#remove low mappablity 
   fragment_length=abs(data$isize[useful_position])
-  fragment_length1=fragment_length[-which(fragment_length>=10000)]
+  fragment_length1=fragment_length[which(fragment_length<10000)]
   return(fragment_length1)
 }
 
