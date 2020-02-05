@@ -15,7 +15,10 @@
 
  #step1:get distance matrix
 cf_dist=function(file_name,chr_name,bw_file_name,maps=0.75,chr_size,mapq=30,cluster_core=20,binsize=500000,add_value=10^(-10)){
-  chr_bw_data=read.table(bw_file_name,row.names = 1,header = T)#read bigwig file 
+  library(rtracklayer)
+  library(Repitools)
+  bw_data=import(bw_file)
+  chr_bw_data=annoGR2DF(bw_data)#read bigwig file 
   high_mapp_location=which(chr_bw_data$score>=maps)
   high_mapp_data=chr_bw_data[high_mapp_location,]
   whole_genome=rep(0,chr_size)
@@ -24,8 +27,6 @@ cf_dist=function(file_name,chr_name,bw_file_name,maps=0.75,chr_size,mapq=30,clus
     i_region=high_mapp_data$start[i]:high_mapp_data$end[i]
     whole_genome[i_region]=i_region_score
   }
-  library(Rsamtools)
-  library(rtracklayer)
   library(foreach)
   library(doParallel)
   cl <- makeCluster(cluster_core)
