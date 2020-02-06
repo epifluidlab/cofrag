@@ -27,7 +27,7 @@ cvm_stat= function(vec1,vec2,power=2){
 }
 
 #wass_test
-wass_stat_R = function(vec1,vec2,power=1) {
+wass_stat = function(vec1,vec2,power=1) {
   n1 = length(vec1)
   n2 = length(vec2)
   n = n1+n2
