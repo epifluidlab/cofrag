@@ -76,6 +76,7 @@ cf_dist=function(file_name,chr_name,bw_file_name,maps=0.75,chr_size,mapq=30,clus
     }
     i_distance=i_p_value
   }
+  stopCluster(cl)
   return(distance_matrix)
 }
 
