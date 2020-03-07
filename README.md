@@ -1,17 +1,11 @@
-# cfHiC
+# cf-HiC
 
-cfHiC: reconstruct 3D genome by cell-free DNA fragmentation patterns
+Project goal: reconstruct 3D genome from cell-free DNA fragmentation patterns.
 
-#step1:get distance matrix
+cell-free DNA fragmentation may carry much information revealing chromatin interactions. By analyzing the statistical distance between fragment distributions from two separated bins, we may infer how the two loci are interacting with each other. This is similar to the idea of Hi-C.
 
-#step2 get raw cfDNA obs data
+Seven steps are involved:
 
-#step3: get corrected obs data
-
-#step4: get corrected distance matrix
-
-#step5 get correlation matrix
-
-#step6 make all NA value to 0
-
-#step7 calculate similarity
+1. Calculate the distance matrix
+2. Calculate the corrected correlation matrix, by using the Hi-C contact probability curve to correct the distance matrix
+3. Calculate the similarity
