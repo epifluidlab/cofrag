@@ -11,6 +11,8 @@ library(Repitools)
 library(Rsamtools)
 library(stringr)
 library(logging)
+library(foreach)
+library(doParallel)
 
 basicConfig()
 
@@ -133,10 +135,7 @@ calc_binned_insert_lengths <-
   }
 
 calc_distance_by_block <-
-  function(bam_file,
-           gr,
-           bin_size,
-           nthreads = 1) {
+  function(bfp_pair) {
     # Calculate the distance matrix within one block
     # Parameters:
     #   * bam_file: must be indexed.
@@ -145,64 +144,65 @@ calc_distance_by_block <-
     #   * block_range: the starting and ending genomic coordinates. For example,
     #       the following is a 5kb block: list(c(200000, 205000), c(300000, 305000)).
     #       The interval is inclusive on both ends.
+    #   * bfp_pair: a pair of subregion binned fragmentation profile, corresponding
+    #       to region_i and region_j respectively.
     
     # Argument check
     # Two regions should be of the same chromosome
-    stopifnot(length(gr) == 2)
-    stopifnot(identical(seqnames(gr)[1], seqnames(gr)[2]))
+    # stopifnot(length(gr) == 2)
+    # stopifnot(identical(seqnames(gr)[1], seqnames(gr)[2]))
+    stopifnot(length(bfp_pair) == 2)
     
     # # Two blocks should be of the same size
     # stopifnot(width(gr)[1] == width(gr)[2])
     # block_size must be a multiple of bin_size
-    stopifnot(width(gr)[1] %% bin_size == 0)
+    # stopifnot(width(gr)[1] %% bin_size == 0)
     
-    loginfo("Calculate binned insert lengths")
+    # loginfo("Calculate binned insert lengths")
     
-    # Aligned reads will be put into bins
-    # It has two objects, each one a numeric vector representing the insert lengths
-    # [[1]]: c(167, 157, 163, ...)
-    binned_insert_lengths <- list()
-    for (i in 1:2) {
-      # Avoid duplicate loading for diagonal blocks
-      if (i == 2 && identical(gr[1], gr[2])) {
-        binned_insert_lengths[[2]] <- binned_insert_lengths[[1]]
-        break
-      }
-      
-      binned_insert_lengths[[i]] <-
-        calc_binned_insert_lengths(bam_file, gr[i], bin_size)
-    }
+    # # Aligned reads will be put into bins
+    # # It has two objects, each one a numeric vector representing the insert lengths
+    # # [[1]]: c(167, 157, 163, ...)
+    # binned_insert_lengths <- list()
+    # for (i in 1:2) {
+    #   # Avoid duplicate loading for diagonal blocks
+    #   if (i == 2 && identical(gr[1], gr[2])) {
+    #     binned_insert_lengths[[2]] <- binned_insert_lengths[[1]]
+    #     break
+    #   }
+    #
+    #   binned_insert_lengths[[i]] <-
+    #     calc_binned_insert_lengths(bam_file, gr[i], bin_size)
+    # }
     
-    loginfo("Completed calculating binned insert lengths")
+    # loginfo("Completed calculating binned insert lengths")
     
     # For each pair of bins, perform the KS-test and use the p-value is the
     # statistical distance
     
-    library(foreach)
-    library(doParallel)
+    # library(foreach)
+    # library(doParallel)
     
-    loginfo("Start calculating the distance matrix for the block")
+    logdebug("Start calculating the distance matrix for the block")
     
-    cl <- makeCluster(nthreads)
-    registerDoParallel(cl)
+    # cl <- makeCluster(nthreads)
+    # registerDoParallel(cl)
     
-    bin_nums <-
-      c(length(binned_insert_lengths[[1]]),
-        length(binned_insert_lengths[[2]]))
+    bin_nums <- c(length(bfp_pair[[1]]), length(bfp_pair[[2]]))
     # Create a permutation of all possible bin pairs
     bin_pairs <- expand.grid(1:bin_nums[1], 1:bin_nums[2])
     dist_vec <-
-      foreach(l = 1:nrow(bin_pairs), .combine = c) %dopar% {
+      sapply(1:nrow(bin_pairs), function(l) {
+        # foreach(l = 1:nrow(bin_pairs), .combine = c) %dopar% {
         idx_i <- bin_pairs[l, ]$Var1
         idx_j <- bin_pairs[l, ]$Var2
-        # loginfo(sprintf("(%d, %d)", idx_i, idx_j))
         
-        v1 <- binned_insert_lengths[[1]][[idx_i]]
-        v2 <- binned_insert_lengths[[2]][[idx_j]]
+        v1 <- bfp_pair[[1]][[idx_i]]
+        v2 <- bfp_pair[[2]][[idx_j]]
         
         # We need at least samples to apply K-S test
         min_vol <- 10
-        if (length(v1) < min_vol || length(v2) < min_vol)
+        if (min(length(v1), length(v2)) < min_vol)
           NA
         else {
           pv <- ks.test(v1, v2)$p.value
@@ -212,10 +212,10 @@ calc_distance_by_block <-
             pv <- min_pv
           - log10(pv)
         }
-      }
-    stopCluster(cl)
+      })
+    # stopCluster(cl)
     
-    loginfo("Completed calculating the distance matrix for the block")
+    logdebug("Completed calculating the distance matrix for the block")
     
     dist_vec
   }
@@ -282,24 +282,98 @@ calc_distance <-
       rg
     })
     
+    # Calculate the binned fragmentation profile for the entire genomic range
+    loginfo("Calculating the binned fragmentation profile")
+    bfp <- calc_binned_insert_lengths(bam_file, gr, bin_size)
+    
     # Calculate the distance matrixes block by block. Row first.
-    dist_matrix_list <- list()
-    block_id <- 0
+    # dist_matrix_list <- list()
+    
+    block_pairs <- list()
+    block_idx <- 0
     for (row_idx in 1:block_num) {
       for (col_idx in row_idx:block_num) {
-        block_id <- block_id + 1
-        gr_block <-
-          GRanges(seqnames(gr), IRanges(
-            start = c(start(block_layout[[row_idx]]), start(block_layout[[col_idx]])),
-            end = c(end(block_layout[[row_idx]]), end(block_layout[[col_idx]]))
-          ))
-        loginfo(sprintf("Process Block (%d, %d)", row_idx, col_idx))
-        dist_matrix_list[[block_id]] <-
-          calc_distance_by_block(bam_file, gr_block, bin_size, nthreads = nthreads)
+        block_idx <- block_idx + 1
+        block_pairs[[block_idx]] <- c(row_idx, col_idx)
       }
     }
     
+    loginfo("Calculating the distance matrix")
+    cl <- makeCluster(nthreads)
+    registerDoParallel(cl)
+    
+    # Cut the genomic range a:b from bfp
+    clip_bfp <- function(a, b) {
+      stopifnot((a - gr_start) %% bin_size == 0)
+      stopifnot((b + 1 - gr_start) %% bin_size == 0)
+      bfp[((a - gr_start) / bin_size + 1):((b + 1 - gr_start) / bin_size)]
+    }
+    
+    gr_name = as.character(seqnames(gr))
+    dist_matrix_list <-
+      foreach (
+        pair = block_pairs,
+        .combine = "list",
+        .multicombine = TRUE,
+        .export = c("logdebug", "loginfo", "calc_distance_by_block")
+      ) %dopar% {
+        row_idx <- pair[1]
+        col_idx <- pair[2]
+        
+        loginfo(
+          sprintf(
+            "Process Block (%d, %d), %s:%d-%d vs. %s:%d-%d",
+            row_idx,
+            col_idx,
+            gr_name,
+            start(block_layout[[row_idx]]),
+            end(block_layout[[row_idx]]),
+            gr_name,
+            start(block_layout[[col_idx]]),
+            end(block_layout[[col_idx]])
+          )
+        )
+        
+        bfp_pair <-
+          list(clip_bfp(start(block_layout[[row_idx]]), end(block_layout[[row_idx]])),
+               clip_bfp(start(block_layout[[col_idx]]), end(block_layout[[col_idx]])))
+        
+        calc_distance_by_block(bfp_pair)
+        
+        #
+        # gr_block <-
+        #   GRanges(seqnames(gr), IRanges(
+        #     start = c(start(block_layout[[row_idx]]), start(block_layout[[col_idx]])),
+        #     end = c(end(block_layout[[row_idx]]), end(block_layout[[col_idx]]))
+        #   ))
+        #
+        #
+        # loginfo(sprintf("Process Block (%d, %d)", row_idx, col_idx))
+        # dist_matrix_list[[block_id]] <-
+        #   calc_distance_by_block(bam_file, gr_block, bin_size, binned_insert_lengths, nthreads = nthreads)
+      }
+    
+    stopCluster(cl)
+    
+    
+    
+    # block_id <- 0
+    # for (row_idx in 1:block_num) {
+    #   for (col_idx in row_idx:block_num) {
+    #     block_id <- block_id + 1
+    #     gr_block <-
+    #       GRanges(seqnames(gr), IRanges(
+    #         start = c(start(block_layout[[row_idx]]), start(block_layout[[col_idx]])),
+    #         end = c(end(block_layout[[row_idx]]), end(block_layout[[col_idx]]))
+    #       ))
+    #     loginfo(sprintf("Process Block (%d, %d)", row_idx, col_idx))
+    #     dist_matrix_list[[block_id]] <-
+    #       calc_distance_by_block(bam_file, gr_block, bin_size, binned_insert_lengths, nthreads = nthreads)
+    #   }
+    # }
+    
     dist_matrix_list
+    loginfo("Completed calculating the distance matrix")
   }
 
 
