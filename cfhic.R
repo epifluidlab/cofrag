@@ -1,0 +1,71 @@
+#!/usr/bin/env Rscript --vanilla
+
+process_args <- function() {
+  library(optparse)
+  
+  args <- commandArgs(trailingOnly = TRUE)
+  if (length(args) == 0)
+    stop("No subcommand found")
+  
+  subcommand <- args[[1]]
+  args <- tail(args, length(args) - 1)
+  
+  if (subcommand == "distance") {
+    list(subcommand = subcommand, args = process_dist_args(args))
+  } else {
+    stop(sprintf("Unknown subcommand: %s", subcommand))
+  }
+}
+
+
+main <- function() {
+  result <- process_args()
+  subcommand <- result$subcommand
+  args <- result$args
+  
+  if (subcommand == "distance") {
+    source("calc_distance.R")
+    calc_distance(
+      bam_file = args$bam_file,
+      gr = args$range,
+      bin_size = args$bin_size,
+      block_size = args$block_size,
+      nthreads = args$ncores
+    )
+  }
+}
+
+process_dist_args <- function(args) {
+  parser <- OptionParser(
+    option_list = list(
+      make_option(c("--range"), help = "Genomic range of the region under study"),
+      make_option(c("-s", "--bin-size"), help = "Size of each bin in base pairs", type = "integer"),
+      make_option(c("-b", "--block-size"), help = "Size of each block in base pairs", type = "integer"),
+      make_option(c("-o", "--output-file"), help = "File name for storing the calculated distance matrix", type = "character"),
+      make_option(
+        c("-n", "--number-of-cores"),
+        help = "The number of cores to be used in the computing",
+        default = 1,
+        dest = "ncores"
+      )
+    )
+  )
+  
+  args <-
+    parse_args(parser, args = args, positional_arguments = TRUE)
+  
+  if (length(args$args) != 1)
+    stop("Please specify one (1) filtered BAM file to process")
+  
+  options <- args$options
+  list(
+    range = options$range,
+    bin_size = options$`bin-size`,
+    block_size = options$`block-size`,
+    output_file = options$`output-file`,
+    ncores = options$ncores,
+    bam_file = args$args[1]
+  )
+}
+
+main()
