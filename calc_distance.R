@@ -10,48 +10,24 @@ library(rtracklayer)
 library(Repitools)
 library(Rsamtools)
 library(stringr)
-library(logging)
 library(foreach)
 library(doParallel)
 
+library(logging)
 basicConfig()
 
-split_interval <- function(a, b, n) {
-  # Split the interval [a, b] into n equal sub-intervals
-  #
-  # It returns a matrix:
-  #
-  # > split_interval(1, 87, 7)
-  #
-  # [1]  1 13 26 38 50 62 75 87
-  # [,1] [,2] [,3] [,4] [,5] [,6] [,7]
-  # [1,]    1   13   26   38   50   62   75
-  # [2,]   12   25   37   49   61   75   87
-  stop_points <- round(seq(a, b, by = (b - a) / n))
-  sapply(1:n, function(i) {
-    if (i < n - 1) {
-      c(stop_points[i], stop_points[i + 1] - 1)
-    } else {
-      # The last interval
-      c(stop_points[i], stop_points[i + 1])
-    }
-  })
-}
-
-get_fragment_len <- function(bam_file, grange) {
-  which <- GRanges(grange)
-  what <- c("isize")
-  param <- ScanBamParam(which = which, what = what)
-  scanBam(bam_file, param = param)
-}
-
-calc_binned_insert_lengths <-
+calc_bfp <-
   function(bam_file, gr, bin_size) {
-    # Load the aligned reads from bam_file, and calculate binned insert lengths
+    # Load the aligned reads from bam_file, and calculate binned fragmentation profile
     # Parameters:
-    #   * gr: a GRanges object.
+    #   * bam_file: must be sorted and indexed
+    #   * gr: a GRanges object indicating the region of interest
+    #   * bin_size
     #
     # Return: list(c(162, 163), c(122), ...)
+    
+    # Argument check
+    stopifnot(width(gr) %% bin_size == 0)
     
     # Load aligned reads
     aligned_reads <-
@@ -127,6 +103,7 @@ calc_binned_insert_lengths <-
     
     # =====
     
+    # Another way of doing the task.
     # apply(bin_layout, 2, function(x) {
     #   # x: the genomic range: (16050401, 16050420)
     #   abs(aligned_reads$isize[aligned_reads$pos >= x[1] &
@@ -172,7 +149,7 @@ calc_distance_by_block <-
     #   }
     #
     #   binned_insert_lengths[[i]] <-
-    #     calc_binned_insert_lengths(bam_file, gr[i], bin_size)
+    #     calc_bfp(bam_file, gr[i], bin_size)
     # }
     
     # loginfo("Completed calculating binned insert lengths")
@@ -236,6 +213,7 @@ calc_distance <-
     
     # Argument check
     # Both the gr range and block_size should be multiples of bin_size
+    gr <- GRanges(gr)
     stopifnot(width(gr) %% bin_size == 0)
     stopifnot(block_size %% bin_size == 0)
     stopifnot(block_size <= width(gr))
@@ -284,7 +262,7 @@ calc_distance <-
     
     # Calculate the binned fragmentation profile for the entire genomic range
     loginfo("Calculating the binned fragmentation profile")
-    bfp <- calc_binned_insert_lengths(bam_file, gr, bin_size)
+    bfp <- calc_bfp(bam_file, gr, bin_size)
     
     # Calculate the distance matrixes block by block. Row first.
     # dist_matrix_list <- list()
@@ -373,54 +351,4 @@ calc_distance <-
     # }
     
     dist_matrix_list
-    loginfo("Completed calculating the distance matrix")
   }
-
-
-process_arguments <- function() {
-  # Default value
-  arguments <- list(nthreads = 1)
-  args_list <- commandArgs(trailingOnly = TRUE)
-  idx <- 1
-  while (idx <= length(args_list)) {
-    action <- args_list[idx]
-    if (action == "--grange") {
-      idx <- idx + 1
-      arguments$grange <- args_list[idx]
-    } else if (action == "--bin-size") {
-      idx <- idx + 1
-      arguments$bin_size <- as.numeric(args_list[idx])
-    } else if (action == "--block-size") {
-      idx <- idx + 1
-      arguments$block_size <- as.numeric(args_list[idx])
-    } else if (action == "-o") {
-      idx <- idx + 1
-      arguments$output_file <- args_list[idx]
-    } else if (action == "-n") {
-      idx <- idx + 1
-      arguments$nthreads <- as.integer(args_list[idx])
-    } else if (idx == length(args_list)) {
-      arguments$bam_file <- args_list[idx]
-      break
-    }
-    idx <- idx + 1
-  }
-  arguments
-}
-
-main <- function(arguments) {
-  dist_matrix_list <-
-    calc_distance(
-      arguments$bam_file,
-      GRanges(arguments$grange),
-      arguments$bin_size,
-      arguments$block_size,
-      arguments$nthreads
-    )
-  
-  save(dist_matrix_list,
-       file = arguments$output_file,
-       ascii = TRUE)
-}
-
-main(process_arguments())
