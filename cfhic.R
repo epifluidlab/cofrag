@@ -1,4 +1,4 @@
-#!/usr/bin/env Rscript --vanilla
+#!/usr/bin/env Rscript
 
 process_args <- function() {
   library(optparse)
@@ -25,13 +25,16 @@ main <- function() {
   
   if (subcommand == "distance") {
     source("calc_distance.R")
-    calc_distance(
+    dm <- calc_distance(
       bam_file = args$bam_file,
       gr = args$range,
       bin_size = args$bin_size,
       block_size = args$block_size,
       nthreads = args$ncores
     )
+    if (!is.null(args$output_file)) {
+      save(dm, file = args$output_file, ascii = TRUE)
+    }
   }
 }
 
