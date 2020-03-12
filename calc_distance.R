@@ -4,36 +4,20 @@
 # may be used to infer information about chromosome 3D conformation. To achieve this, we start
 # from calculating the statistical distance between any two binned segments
 
-library(dplyr)
-library(doParallel)
-library(rtracklayer)
-library(Repitools)
-library(Rsamtools)
-library(stringr)
-library(foreach)
-library(doParallel)
+
 
 library(logging)
 basicConfig()
 
 calc_bfp <-
-  function(bam_file, gr, bin_size) {
+  function(aligned_reads, gr, bin_size) {
     # Load the aligned reads from bam_file, and calculate binned fragmentation profile
     # Parameters:
-    #   * bam_file: must be sorted and indexed
+    #   * aligned_reads: results from scanBam, with only pos and isize data loaded
     #   * gr: a GRanges object indicating the region of interest
     #   * bin_size
     #
     # Return: list(c(162, 163), c(122), ...)
-    
-    # Argument check
-    stopifnot(width(gr) %% bin_size == 0)
-    
-    # Load aligned reads
-    aligned_reads <-
-      scanBam(bam_file,
-              param = ScanBamParam(which = gr,
-                                   what = c("pos", "isize")))[[1]]
     
     # Distribute the aligned reads into bins
     endpoints <- seq(start(gr), end(gr), by = bin_size)
@@ -68,6 +52,8 @@ calc_bfp <-
     for (idx in 1:length(aligned_reads$pos)) {
       # Scan the aligned reads (sorted bam) to calcuate the binning
       pos <- aligned_reads$pos[idx]
+      if (pos < bin_layout[1, bin_idx])
+        next
       if (between(pos, bin_layout[1, bin_idx], bin_layout[2, bin_idx])) {
         if (idx == 1)
           binned_reads_stop_points[1, bin_idx] <- 1
@@ -112,20 +98,18 @@ calc_bfp <-
   }
 
 # Perform a Two-sample K-S test for statistical distance calculation
-ks_distance <- function(s1, s2) {
-  # We reuqire at least 100 samples for both collections
-  min_vol <- 100
-  if (min(length(s1), length(s2)) < min_vol)
+ks_distance <- function(s1, s2, min_samples = 1000) {
+  # We reuqire at least a certain minimal number of samples
+  if (min(length(s1), length(s2)) < min_samples)
     NA
   else {
     pv <- ks.test(s1, s2)$p.value
     # pv shouldn't be zero
-    min_pv <- 5e-320
+    min_pv <- 1e-10
     if (pv < min_pv)
       pv <- min_pv
     - log10(pv)
   }
-  
 }
 
 # Cut the genomic range a:b from bfp
@@ -171,12 +155,138 @@ calc_distance_by_block <-
     dist_vec
   }
 
+calc_distance_helper <- function(aligned_reads, gr, bin_size, block_size, nthreads, opts) {
+  # Divide the genome of interest into blocks
+  gr_start <- start(gr)
+  gr_end <- end(gr)
+  block_num <- round(width(gr) / block_size)
+  
+  loginfo(sprintf(
+    "Region-of-interest has been divided into %d sub-regions",
+    block_num
+  ))
+  
+  # Example: c(IRanges(1, 100), IRanges(101, 200))
+  block_layout <- lapply(1:block_num, function(i) {
+    if (i < block_num)
+      rg <- IRanges(start = gr_start + (i - 1) * block_size,
+                    end = gr_start + i * block_size - 1)
+    else
+      rg <-
+        IRanges(start = gr_start + (i - 1) * block_size, end = gr_end)
+    
+    loginfo(sprintf(
+      "Sub-region #%d: %s:%d-%d, width: %d",
+      i,
+      seqnames(gr),
+      start(rg),
+      end(rg),
+      width(rg)
+    ))
+    rg
+  })
+  
+  # Calculate the binned fragmentation profile for the entire genomic range
+  loginfo("Calculating the binned fragmentation profile")
+  bfp <- calc_bfp(aligned_reads, gr, bin_size)
+  
+  # Calculate the distance matrixes block by block. Row first.
+  # dist_matrix_list <- list()
+  
+  block_pairs <- list()
+  block_idx <- 0
+  for (row_idx in 1:block_num) {
+    for (col_idx in row_idx:block_num) {
+      block_idx <- block_idx + 1
+      block_pairs[[block_idx]] <- c(row_idx, col_idx)
+    }
+  }
+  
+  loginfo("Calculating the distance matrix")
+  
+  gr_name = as.character(seqnames(gr))
+  cl <- makeCluster(nthreads)
+  registerDoParallel(cl)
+  dist_matrix_list <-
+    foreach (
+      pair = block_pairs,
+      # .combine = "c",
+      # .multicombine = TRUE,
+      .export = c(
+        "loginfo",
+        "logdebug",
+        "calc_distance_by_block",
+        "clip_bfp",
+        "ks_distance",
+        "start",
+        "end"
+      )
+    ) %dopar% {
+      row_idx <- pair[1]
+      col_idx <- pair[2]
+      
+      bfp_pair <-
+        list(
+          clip_bfp(
+            bfp,
+            start(block_layout[[row_idx]]),
+            end(block_layout[[row_idx]]),
+            gr_start,
+            bin_size
+          ),
+          clip_bfp(
+            bfp,
+            start(block_layout[[col_idx]]),
+            end(block_layout[[col_idx]]),
+            gr_start,
+            bin_size
+          )
+        )
+      
+      calc_distance_by_block(bfp_pair, function(a, b) { ks_distance(a, b, opts$min_samples) })
+    }
+  
+  stopCluster(cl)
+  
+  loginfo("Completed calculating the distances")
+  
+  # Conver to standard matrix representation
+  dm <-
+    matrix(rep(NA, (width(gr) / bin_size) ^ 2),
+           ncol = width(gr) / bin_size,
+           nrow = width(gr) / bin_size)
+  block_idx <- 0
+  for (pair in block_pairs) {
+    block_idx <- block_idx + 1
+    row_idx <- pair[1]
+    col_idx <- pair[2]
+    
+    row_start <-
+      (start(block_layout[[row_idx]]) - gr_start) / bin_size + 1
+    row_end <-
+      (end(block_layout[[row_idx]]) + 1 - gr_start) / bin_size
+    col_start <-
+      (start(block_layout[[col_idx]]) - gr_start) / bin_size + 1
+    col_end <-
+      (end(block_layout[[col_idx]]) + 1 - gr_start) / bin_size
+    
+    dm[row_start:row_end, col_start:col_end] <-
+      dist_matrix_list[[block_idx]]
+  }
+  # Make the distance matrix symmetric
+  dm[lower.tri(dm)] <- 0
+  dm + t(dm)
+}
+
 calc_distance <-
   function(bam_file,
            gr,
            bin_size,
            block_size,
-           nthreads = 1) {
+           nthreads = 1,
+           metrics = "ks",
+           opts = NULL
+           ) {
     # Calculate the distance matrix
     # Parameters:
     # * bam_file: must be indexed. Alignd to a single chromosome.
@@ -184,6 +294,16 @@ calc_distance <-
     # * bin_zize
     # * block_size: the calculation is performed based on "blocks". Notice that
     #     block_size should be multiples of bin_size
+    # * opts: other options for the calculation
+    
+    library(dplyr)
+    library(doParallel)
+    library(rtracklayer)
+    library(Repitools)
+    library(Rsamtools)
+    library(stringr)
+    library(foreach)
+    library(doParallel)
     
     # Argument check
     # Both the gr range and block_size should be multiples of bin_size
@@ -192,111 +312,29 @@ calc_distance <-
     stopifnot(block_size %% bin_size == 0)
     stopifnot(block_size <= width(gr))
     
-    # Divide the genome of interest into blocks
-    gr_start <- start(gr)
-    gr_end <- end(gr)
-    block_num <- round((gr_end - gr_start) / block_size)
+    # Only support KS test
+    stopifnot(metrics == "ks")
     
     loginfo(
       sprintf(
-        "Calculation summary: BAM: %s Range: %s:%d-%d, bin_size=%d, block_size=%d, nthreads=%d",
+        "Calculation summary: BAM: %s Range: %s:%d-%d, bin_size=%d, block_size=%d, nthreads=%d, metrics=%s, min_samples=%d",
         bam_file,
         seqnames(gr),
         start(gr),
         end(gr),
         bin_size,
         block_size,
-        nthreads
+        nthreads,
+        metrics,
+        opts$min_samples
       )
     )
     
-    loginfo(sprintf(
-      "Region-of-interest has been divided into %d sub-regions",
-      block_num
-    ))
+    # Load the data
+    aligned_reads <-
+      scanBam(bam_file,
+              param = ScanBamParam(which = gr,
+                                   what = c("pos", "isize")))[[1]]
     
-    # Example: c(IRanges(1, 100), IRanges(101, 200))
-    block_layout <- lapply(1:block_num, function(i) {
-      if (i < block_num)
-        rg <- IRanges(start = gr_start + (i - 1) * block_size,
-                      end = gr_start + i * block_size - 1)
-      else
-        rg <-
-          IRanges(start = gr_start + (i - 1) * block_size, end = gr_end)
-      loginfo(sprintf(
-        "Sub-region #%d: %s:%d-%d, width: %d",
-        i,
-        seqnames(gr),
-        start(rg),
-        end(rg),
-        width(rg)
-      ))
-      rg
-    })
-    
-    # Calculate the binned fragmentation profile for the entire genomic range
-    loginfo("Calculating the binned fragmentation profile")
-    bfp <- calc_bfp(bam_file, gr, bin_size)
-    
-    # Calculate the distance matrixes block by block. Row first.
-    # dist_matrix_list <- list()
-    
-    block_pairs <- list()
-    block_idx <- 0
-    for (row_idx in 1:block_num) {
-      for (col_idx in row_idx:block_num) {
-        block_idx <- block_idx + 1
-        block_pairs[[block_idx]] <- c(row_idx, col_idx)
-      }
-    }
-    
-    loginfo("Calculating the distance matrix")
-
-    gr_name = as.character(seqnames(gr))
-    cl <- makeCluster(nthreads)
-    registerDoParallel(cl)
-    dist_matrix_list <-
-      foreach (
-        pair = block_pairs,
-        .combine = "list",
-        .multicombine = TRUE,
-        .export = c(
-          "loginfo",
-          "logdebug",
-          "calc_distance_by_block",
-          "clip_bfp",
-          "ks_distance",
-          "start",
-          "end"
-        )
-      ) %dopar% {
-        row_idx <- pair[1]
-        col_idx <- pair[2]
-        
-        bfp_pair <-
-          list(
-            clip_bfp(
-              bfp,
-              start(block_layout[[row_idx]]),
-              end(block_layout[[row_idx]]),
-              gr_start,
-              bin_size
-            ),
-            clip_bfp(
-              bfp,
-              start(block_layout[[col_idx]]),
-              end(block_layout[[col_idx]]),
-              gr_start,
-              bin_size
-            )
-          )
-        
-        calc_distance_by_block(bfp_pair, ks_distance)
-      }
-    
-    stopCluster(cl)
-    
-    loginfo("Completed calculating the distance matrix")
-    
-    dist_matrix_list
+    calc_distance_helper(aligned_reads, gr, bin_size, block_size, nthreads, opts)
   }

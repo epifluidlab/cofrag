@@ -2,11 +2,6 @@ library(testthat)
 
 source("../calc_distance.R", chdir = TRUE)
 
-test_that("Have a test", {
-  expect_equal(1, 1)
-  expect_equal(2, 2)
-})
-
 test_that("Test calc_bfp", {
   # Prepare the simulation data
   n <- 10000

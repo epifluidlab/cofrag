@@ -30,10 +30,18 @@ main <- function() {
       gr = args$range,
       bin_size = args$bin_size,
       block_size = args$block_size,
-      nthreads = args$ncores
+      nthreads = args$ncores,
+      metrics = args$metrics,
+      opts = list(min_samples = args$min_samples)
     )
     if (!is.null(args$output_file)) {
-      save(dm, file = args$output_file, ascii = TRUE)
+      write.table(
+        dm,
+        file = args$output_file,
+        sep = "\t",
+        row.names = FALSE,
+        col.names = FALSE
+      )
     }
   }
 }
@@ -45,6 +53,17 @@ process_dist_args <- function(args) {
       make_option(c("-s", "--bin-size"), help = "Size of each bin in base pairs", type = "integer"),
       make_option(c("-b", "--block-size"), help = "Size of each block in base pairs", type = "integer"),
       make_option(c("-o", "--output-file"), help = "File name for storing the calculated distance matrix", type = "character"),
+      make_option(
+        c("-m", "--metrics"), 
+        help = "The statistical distance metrics. Currently only 'ks' (Kolmogorov–Smirnov test) is supported.",
+        default = "ks"
+      ),
+      make_option(
+        c("--min-samples"),
+        help = "The minimul number of samples from each bin required to perform the calculation.",
+        default = 1000,
+        type = "integer"
+      ),
       make_option(
         c("-n", "--number-of-cores"),
         help = "The number of cores to be used in the computing",
@@ -61,12 +80,15 @@ process_dist_args <- function(args) {
     stop("Please specify one (1) filtered BAM file to process")
   
   options <- args$options
+  stopifnot(options$metrics == "ks")
   list(
     range = options$range,
     bin_size = options$`bin-size`,
     block_size = options$`block-size`,
     output_file = options$`output-file`,
     ncores = options$ncores,
+    metrics = options$metrics,
+    min_samples = options$`min-samples`,
     bam_file = args$args[1]
   )
 }

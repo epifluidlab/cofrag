@@ -1,5 +1,9 @@
+# Filter the BAM file based on flags, mapping quality, and mappability.
 # Usage:
 # Rscript bam_filter.R --chr 22 --maps 0.75 --mapq 30 --map-track m.bw n.bam
+
+library(logging)
+basicConfig()
 
 library(dplyr)
 library(doParallel)
