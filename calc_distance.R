@@ -103,7 +103,7 @@ ks_distance <- function(s1, s2, min_samples = 1000) {
   else {
     pv <- ks.test(s1, s2)$p.value
     # pv shouldn't be zero
-    min_pv <- 1e-10
+    min_pv <- 5e-320
     if (pv < min_pv)
       pv <- min_pv
     - log10(pv)

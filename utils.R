@@ -9,7 +9,8 @@ plot_hic_matrix <-
            start,
            end,
            tick_func = default_tick_func,
-           title = NULL,
+           color = "hic",
+           main_title = NULL,
            ...) {
     my.image <- function(figData,  zlim, col, na.color = 'gray', ...)
     {
@@ -24,7 +25,11 @@ plot_hic_matrix <-
       image(figData,  zlim = zlim, col = col, ...) # we finally call image(...)
     }
     
-    cp <- colorpanel(64, "#FB040A", "#E5C2C3", "white")
+    if (identical(color, "hic"))
+      cp <- colorpanel(64, "#FB040A", "#FF7F82", "white")
+    else
+      cp <- color
+
     min_val <- min(as.vector(dm[!is.na(dm)]))
     max_val <- max(as.vector(dm[!is.na(dm)]))
     zlim <- c(min_val, max_val)
@@ -53,7 +58,7 @@ plot_hic_matrix <-
       srt = 45,
       tick = TRUE
     )
-    if (is.null(title))
+    if (is.null(main_title))
       main_title <-
       sprintf(
         "Hi-C heatmap for %s-%s",
