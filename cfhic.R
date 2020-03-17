@@ -39,8 +39,8 @@ main <- function() {
         dm,
         file = args$output_file,
         sep = "\t",
-        row.names = FALSE,
-        col.names = FALSE
+        row.names = T,
+        col.names = T
       )
     }
   }

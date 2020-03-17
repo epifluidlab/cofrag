@@ -1,5 +1,10 @@
 calc_disp_matrix <- function(nrow, ncol) {
   # Return the displacement matrix, i.e. abs(row_index - col_index)
+  # For example:
+  #      [,1] [,2] [,3]
+  # [1,]    0    1    2
+  # [2,]    1    0    1
+  # [3,]    2    1    0
   row_matrix <- matrix(rep(1:nrow, ncol), nrow = nrow, ncol = ncol)
   col_matrix <-
     matrix(rep(1:ncol, 1, each = nrow), nrow = nrow, ncol = ncol)
