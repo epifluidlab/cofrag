@@ -250,7 +250,10 @@ calc_distance_helper <-
           )
         
         calc_distance_by_block(bfp_pair, function(a, b) {
-          ks_distance(a, b, opts$min_samples)
+          if (is.null(opts))
+            ks_distance(a, b)
+          else
+            ks_distance(a, b, opts$min_samples)
         })
       }
     
@@ -283,7 +286,14 @@ calc_distance_helper <-
     }
     # Make the distance matrix symmetric
     dm[lower.tri(dm)] <- 0
-    dm + t(dm)
+    dm <- dm + t(dm)
+    
+    # Set row and col names to the corresponding genomic coordinates
+    rownames(dm) <-
+      sapply(1:nrow(dm), function(v)
+        sprintf("%s:%d", seqnames(gr), gr_start + (v - 1) * bin_size))
+    colnames(dm) <- rownames(dm)
+    dm
   }
 
 pad_block_size <- function(gr, bin_size, block_size) {
