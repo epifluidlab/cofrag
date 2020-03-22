@@ -11,7 +11,7 @@ calc_disp_matrix <- function(nrow, ncol) {
   abs(row_matrix - col_matrix)
 }
 
-calc_freq_curve <- function(data, nthread = 1) {
+calc_freq_curve <- function(data, bin_size, nthread = 1) {
   # Calculate the contact frequency curve
   # The matrix should be square
   stopifnot(nrow(data) == ncol(data))
@@ -49,13 +49,17 @@ calc_freq_curve <- function(data, nthread = 1) {
         data_d_dist <- data_d_dist[!is.na(data_d_dist)]
         data_summary <- summary(data_d_dist, na.rm = T)
         data_summary$n <- length(data_d_dist)
-        tmp <- unlist(data_summary)
-        tmp
+        unlist(data_summary)
       })
       r
     }
   
   stopCluster(cl)
   
-  results
+  # results is a list of rows. Each row is a numeric vector representing "summary"
+  # Here we convert it to a data.frame
+  df <- data.frame(matrix(unlist(results), nrow = length(results), byrow = TRUE))
+  colnames(df) <- names(results[[1]])
+  df[["Dist."]] <- (1:nrow(df) - 1) * bin_size
+  df
 }
