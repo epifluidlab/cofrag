@@ -1,8 +1,15 @@
-library(gplots)
-
 default_tick_func <- function(ticks)
   sapply(round(ticks / 1000), function(v)
     sprintf("%s kb", format(v, big.mark = ",")))
+
+load_distance_matrix <- function(file_name, distance_cap = NULL) {
+  dm <- as.matrix(read.table(file_name, as.is = TRUE))
+  colnames(dm) <- rownames(dm)
+  # Cap entries with extremely large distance
+  if (!is.null(distance_cap))
+    dm[dm > distance_cap] <- distance_cap
+  dm
+}
 
 # Plot the matrix as a 2D image
 plot_hic_matrix <-
@@ -13,6 +20,8 @@ plot_hic_matrix <-
            color = "hic",
            main_title = NULL,
            ...) {
+    library(gplots)
+    
     my.image <- function(figData,  zlim, col, na.color = 'gray', ...)
     {
       newz.na <-
