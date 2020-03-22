@@ -8,7 +8,7 @@ library(logging)
 basicConfig()
 
 calc_bfp <-
-  function(aligned_reads, gr, bin_size) {
+  function(aligned_reads, gr, bin_size, max_frag_size = 500) {
     # Load the aligned reads from bam_file, and calculate binned fragmentation profile
     # Parameters:
     #   * aligned_reads: results from scanBam, with only pos and isize data loaded
@@ -81,8 +81,10 @@ calc_bfp <-
     apply(binned_reads_stop_points, 2, function(x) {
       if (is.na(x[1]) || is.na(x[2]))
         integer(0)
-      else
-        abs(aligned_reads$isize[x[1]:x[2]])
+      else {
+        isizes <- abs(aligned_reads$isize[x[1]:x[2]])
+        isizes[isizes <= max_frag_size]
+      }
     })
     
     # =====
@@ -194,7 +196,14 @@ calc_distance_helper <-
     
     # Calculate the binned fragmentation profile for the entire genomic range
     loginfo("Calculating the binned fragmentation profile")
-    bfp <- calc_bfp(aligned_reads, gr, bin_size)
+    if (is.null(opts$max_frag_size)) {
+      loginfo("max_frag_size: NULL")
+      bfp <- calc_bfp(aligned_reads, gr, bin_size)
+    }
+    else {
+      loginfo(paste0("max_frag_size: ", opts$max_frag_size))
+      bfp <- calc_bfp(aligned_reads, gr, bin_size, opts$max_frag_size)
+    }
     
     # Calculate the distance matrixes block by block. Row first.
     # dist_matrix_list <- list()
@@ -250,10 +259,14 @@ calc_distance_helper <-
           )
         
         calc_distance_by_block(bfp_pair, function(a, b) {
-          if (is.null(opts))
+          if (is.null(opts$min_samples)) {
+            loginfo("min_samples: NULL")
             ks_distance(a, b)
-          else
+          }
+          else {
+            loginfo(paste0("min_samples: ", opts$min_samples))
             ks_distance(a, b, opts$min_samples)
+          }
         })
       }
     
@@ -330,7 +343,7 @@ calc_distance <-
            block_size,
            nthreads = 1,
            metrics = "ks",
-           opts = NULL) {
+           opts = list()) {
     # Calculate the distance matrix
     # Parameters:
     # * bam_file: must be indexed. Alignd to a single chromosome.
@@ -377,7 +390,7 @@ calc_distance <-
     
     loginfo(
       sprintf(
-        "Calculation summary: BAM: %s Range: %s:%s-%s, bin_size=%s, block_size=%s, nthreads=%d, metrics=%s, min_samples=%s",
+        "Calculation summary: BAM: %s Range: %s:%s-%s, bin_size=%s, block_size=%s, nthreads=%d, metrics=%s, min_samples=%s, max_frag_size=%s",
         bam_file,
         seqnames(gr),
         format(start(gr), big.mark = ","),
@@ -386,9 +399,9 @@ calc_distance <-
         format(block_size, big.mark = ","),
         nthreads,
         metrics,
-        format(opts$min_samples, big.mark = ",")
-      )
-    )
+        format(if (is.null(opts$min_samples)) "" else opts$min_samples, big.mark = ","),
+        if (is.null(opts$max_frag_size)) "" else opts$max_frag_size
+      ))
     
     # Load the data
     aligned_reads <-

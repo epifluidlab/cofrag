@@ -32,7 +32,7 @@ main <- function() {
       block_size = args$block_size,
       nthreads = args$ncores,
       metrics = args$metrics,
-      opts = list(min_samples = args$min_samples)
+      opts = list(min_samples = args$min_samples, max_frag_size = args$max_frag_size)
     )
     if (!is.null(args$output_file)) {
       write.table(
@@ -65,6 +65,12 @@ process_dist_args <- function(args) {
         type = "integer"
       ),
       make_option(
+        c("--max-frag-size"),
+        help = "Filter out any fragments with larger sizes",
+        default = 240,
+        type = "integer"
+      ),
+      make_option(
         c("-n", "--number-of-cores"),
         help = "The number of cores to be used in the computing",
         default = 1,
@@ -89,6 +95,7 @@ process_dist_args <- function(args) {
     ncores = options$ncores,
     metrics = options$metrics,
     min_samples = options$`min-samples`,
+    max_frag_size = options$`max-frag-size`,
     bam_file = args$args[1]
   )
 }
