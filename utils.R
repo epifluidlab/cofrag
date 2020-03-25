@@ -1,82 +1,22 @@
-default_tick_func <- function(ticks)
-  sapply(round(ticks / 1000), function(v)
-    sprintf("%s kb", format(v, big.mark = ",")))
-
 load_distance_matrix <- function(file_name, distance_cap = NULL) {
-  dm <- as.matrix(read.table(file_name, as.is = TRUE))
-  colnames(dm) <- rownames(dm)
+  dm <- load_matrix(file_name)
   # Cap entries with extremely large distance
   if (!is.null(distance_cap))
     dm[dm > distance_cap] <- distance_cap
   dm
 }
 
-# Plot the matrix as a 2D image
-plot_hic_matrix <-
-  function(m,
-           start,
-           end,
-           tick_func = default_tick_func,
-           color = "hic",
-           main_title = NULL,
-           ...) {
-    library(gplots)
-    
-    my.image <- function(figData,  zlim, col, na.color = 'gray', ...)
-    {
-      newz.na <-
-        zlim[2] + (zlim[2] - zlim[1]) / length(col) # new z for NA
-      figData[which(is.na(figData))] <-
-        newz.na # we affect newz.outside
-      zlim[2] <-
-        zlim[2] + (zlim[2] - zlim[1]) / length(col) # we finally extend the z limits to include the two new values
-      col <-
-        c(col, na.color) # we construct the new color range by including: na.color and outside.color
-      image(figData,  zlim = zlim, col = col, ...) # we finally call image(...)
-    }
-    
-    if (identical(color, "hic"))
-      cp <- colorpanel(64, "#FB040A", "#FF7F82", "white")
-    else
-      cp <- color
-    
-    min_val <- min(as.vector(m[!is.na(m)]))
-    max_val <- max(as.vector(m[!is.na(m)]))
-    zlim <- c(min_val, max_val)
-    my.image(
-      m[, nrow(m):1],
-      zlim,
-      cp,
-      na.color = "gray",
-      useRaster = TRUE,
-      axes = FALSE,
-      ...
-    )
-    
-    ticks <- tick_func(seq(start, end, length.out = 6))
-    axis(
-      2,
-      at = seq(0, 1, length.out = 6),
-      labels = rev(ticks),
-      srt = 45,
-      tick = TRUE
-    )
-    axis(
-      3,
-      at = seq(0, 1, length.out = 6),
-      labels = ticks,
-      srt = 45,
-      tick = TRUE
-    )
-    if (is.null(main_title))
-      main_title <-
-      sprintf(
-        "Hi-C heatmap for %s-%s",
-        format(start, digits = 15, big.mark = ","),
-        format(end, digits = 15, big.mark = ",")
-      )
-    title(main_title, line = 2.5)
-  }
+# Load a matrix from file
+load_matrix <- function(file_name) {
+  dm <- as.matrix(read.table(file_name, as.is = TRUE))
+  colnames(dm) <- rownames(dm)
+  dm
+}
+
+# Convert a distance matrix to a proximity matrix.
+# A proximity matrix is simply a linear transformed distance matrix on a 0-1 scale
+dist2prox <- function(data) 1 - data / max(data, na.rm = TRUE)
+
 
 # Convert the matrix to "short format" which is required by Pre for .hic generation
 # https://github.com/aidenlab/juicer/wiki/Pre#short-format

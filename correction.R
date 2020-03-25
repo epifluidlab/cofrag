@@ -11,6 +11,35 @@ calc_disp_matrix <- function(nrow, ncol) {
   abs(row_matrix - col_matrix)
 }
 
+# Summarize matrix entries grouped by abs(i - j) distance.
+# This function is the foundation of calculating the frequency curve
+# and the proximity curve
+calc_grouped_summary <- function(data) {
+  # data: a square matrix
+  # return a data frame which is the summary metrics for different distances
+  
+  # The matrix should be square
+  stopifnot(nrow(data) == ncol(data))
+  
+  library(dplyr)
+  
+  disp_matrix <- calc_disp_matrix(nrow(data), ncol(data))
+  as_tibble(data.frame(score = c(data), dist = c(disp_matrix))) %>% group_by(dist) %>% summarise(
+    mean = mean(score, na.rm = TRUE),
+    median = median(score, na.rm = TRUE),
+    min = min(score, na.rm = TRUE),
+    max = max(score, na.rm = TRUE),
+    n = sum(!is.na(score)),
+    var = var(score, na.rm = TRUE),
+    sum = sum(score, na.rm = TRUE)
+  )
+}
+
+calc_contact_prob <- function(data, nthread = 1) {
+  sm <- calc_grouped_summary(data, nthread)
+  sm %>% select()
+}
+
 calc_freq_curve <- function(data, bin_size, nthread = 1) {
   # Calculate the contact frequency curve
   # The matrix should be square
@@ -62,4 +91,18 @@ calc_freq_curve <- function(data, bin_size, nthread = 1) {
   colnames(df) <- names(results[[1]])
   df[["Dist."]] <- (1:nrow(df) - 1) * bin_size
   df
+}
+
+calc_prox_curve <- calc_freq_curve
+
+# Load Hi-C data in _obs_data format and get grouped summary
+calc_hic_prob <- function(file_name, chr_size) {
+  # chr_size: the size of the chromosome
+  hic_data <- as_tibble(read.table(file_name, as.is = TRUE))
+  colnames(hic_data) <- c("i", "j", "contact")
+  hic_data$dist <- abs(hic_data$i - hic_data$j)
+  # hic_data %>% group_by(dist) %>% summarise(s = sum(contact, na.rm = TRUE)) %>% mutate(dist = dist, prob = s / (chr_size - dist)) %>% select(dist, prob)
+  
+  tot <- sum(hic_data$contact, na.rm = TRUE)
+  hic_data %>% group_by(dist) %>% summarise(s = sum(contact, na.rm = TRUE)) %>% mutate(dist = dist, prob = s / tot) %>% select(dist, prob)
 }
