@@ -86,7 +86,7 @@ process_dist_args <- function(args) {
     stop("Please specify one (1) filtered BAM file to process")
   
   options <- args$options
-  stopifnot(options$metrics == "ks")
+  stopifnot(options$metrics == "ks" || options$metrics == "cucconi")
   list(
     range = options$range,
     bin_size = options$`bin-size`,

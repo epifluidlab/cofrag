@@ -112,6 +112,28 @@ ks_distance <- function(s1, s2, min_samples = 1000) {
   }
 }
 
+
+
+# Perform a Two-sample K-S test for statistical distance calculation
+cucconi_distance <- function(s1, s2, min_samples = 1000) {
+  # We reuqire at least a certain minimal number of samples
+  if (min(length(s1), length(s2)) < min_samples)
+    NA
+  else {
+    if (length(s1) > 10000)
+      s1 <- sample(s1, 10000)
+    if (length(s2) > 10000)
+      s2 <- sample(s2, 10000)
+    
+    pv <- cucconi.test(s1, s2)$p.value
+    # pv shouldn't be zero
+    min_pv <- 5e-320
+    if (pv < min_pv)
+      pv <- min_pv
+    - log10(pv)
+  }
+}
+
 # Cut the genomic range a:b from bfp
 clip_bfp <- function(bfp, a, b, gr_start, bin_size) {
   stopifnot((a - gr_start) %% bin_size == 0)
@@ -161,7 +183,11 @@ calc_distance_helper <-
            bin_size,
            block_size,
            nthreads,
-           opts) {
+           opts,
+           metrics = "ks"
+           ) {
+    stopifnot(metrics == "ks" || metrics == "cucconi")
+    
     # Divide the genome of interest into blocks
     gr_start <- start(gr)
     gr_end <- end(gr)
@@ -219,6 +245,13 @@ calc_distance_helper <-
     
     loginfo("Calculating the distance matrix")
     
+    
+    source("./nonpar/cucconi.test.R")
+    source("./nonpar/cucconi.teststat.R")
+    source("./nonpar/cucconi.dist.perm.R")
+    source("./nonpar/cucconi.dist.boot.R")
+    
+    
     gr_name = as.character(seqnames(gr))
     cl <- makeCluster(nthreads)
     registerDoParallel(cl)
@@ -233,6 +266,11 @@ calc_distance_helper <-
           "calc_distance_by_block",
           "clip_bfp",
           "ks_distance",
+          "cucconi_distance",
+          "cucconi.test",
+          "cucconi.teststat",
+          "cucconi.dist.boot",
+          "cucconi.dist.perm",
           "start",
           "end"
         )
@@ -259,13 +297,18 @@ calc_distance_helper <-
           )
         
         calc_distance_by_block(bfp_pair, function(a, b) {
+          if (metrics == "ks")
+            distance_func = ks_distance
+          else if (metrics == "cucconi")
+            distance_func = cucconi_distance
+          
           if (is.null(opts$min_samples)) {
             loginfo("min_samples: NULL")
-            ks_distance(a, b)
+            distance_func(a, b)
           }
           else {
             loginfo(paste0("min_samples: ", opts$min_samples))
-            ks_distance(a, b, opts$min_samples)
+            distance_func(a, b, opts$min_samples)
           }
         })
       }
@@ -386,7 +429,7 @@ calc_distance <-
     stopifnot(block_size <= width(gr))
     
     # Only support KS test
-    stopifnot(metrics == "ks")
+    stopifnot(metrics == "ks" || metrics == "cucconi")
     
     loginfo(
       sprintf(
@@ -409,5 +452,5 @@ calc_distance <-
               param = ScanBamParam(which = gr,
                                    what = c("pos", "isize")))[[1]]
     
-    calc_distance_helper(aligned_reads, gr, bin_size, block_size, nthreads, opts)
+    calc_distance_helper(aligned_reads, gr, bin_size, block_size, nthreads, opts, metrics = metrics)
   }
