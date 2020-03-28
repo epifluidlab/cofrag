@@ -1,8 +1,16 @@
-load_distance_matrix <- function(file_name, distance_cap = NULL) {
+load_distance_matrix <- function(file_name, distance_cap = NULL, col_row_names = FALSE, chr = NULL, range_start = NULL, bin_size = NULL) {
+  # col_row_names: if TRUE, colnames and rownames will be calculated from range_start and bin_size
   dm <- load_matrix(file_name)
+  stopifnot(nrow(dm) == ncol(dm))
   # Cap entries with extremely large distance
   if (!is.null(distance_cap))
     dm[dm > distance_cap] <- distance_cap
+  
+  if (col_row_names) {
+    colnames(dm) <- paste0(chr, ":", sapply(1:nrow(dm), function(v) (v - 1) * bin_size + 1))
+    rownames(dm) <- colnames(dm)
+  }
+  
   dm
 }
 
@@ -11,6 +19,13 @@ load_matrix <- function(file_name) {
   dm <- as.matrix(read.table(file_name, as.is = TRUE))
   colnames(dm) <- rownames(dm)
   dm
+}
+
+# Load Hi-C "obs" data from file
+load_hic_obs <- function(file_name) {
+  hic_data <- as_tibble(read.table(file_name, as.is = T))
+  colnames(hic_data) <- c("i", "j", "contact")
+  hic_data
 }
 
 # Convert a distance matrix to a proximity matrix.

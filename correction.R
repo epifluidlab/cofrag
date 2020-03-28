@@ -96,13 +96,21 @@ calc_freq_curve <- function(data, bin_size, nthread = 1) {
 calc_prox_curve <- calc_freq_curve
 
 # Load Hi-C data in _obs_data format and get grouped summary
-calc_hic_prob <- function(file_name, chr_size) {
-  # chr_size: the size of the chromosome
-  hic_data <- as_tibble(read.table(file_name, as.is = TRUE))
-  colnames(hic_data) <- c("i", "j", "contact")
-  hic_data$dist <- abs(hic_data$i - hic_data$j)
-  # hic_data %>% group_by(dist) %>% summarise(s = sum(contact, na.rm = TRUE)) %>% mutate(dist = dist, prob = s / (chr_size - dist)) %>% select(dist, prob)
+calc_hic_prob <- function(hic_obs) {
+  tot <- sum(hic_obs$contact, na.rm = T)
+  hic_obs %>% mutate(dist = abs(i - j)) %>% group_by(dist) %>% summarise(s = sum(contact, na.rm = TRUE)) %>% mutate(dist = dist, prob = s / tot) %>% select(dist, prob)
+}
+
+
+correct_prox_matrix <- function(pm, prox_curve, contact_prob) {
+  n1 <- nrow(prox_curve)
+  n2 <- nrow(contact_prob)
+  if (n1 > n2)
+    ratio <- c(contact_prob$prob, rep(NA, n1 - n2)) / prox_curve$score
+  else
+    ratio <- contact_prob$prob / c(prox_curve$score, rep(NA, n2 - n1))
+  ratio[is.infinite(ratio) | is.nan(ratio)] <- NA
   
-  tot <- sum(hic_data$contact, na.rm = TRUE)
-  hic_data %>% group_by(dist) %>% summarise(s = sum(contact, na.rm = TRUE)) %>% mutate(dist = dist, prob = s / tot) %>% select(dist, prob)
+  disp_matrix <- calc_disp_matrix(length(ratio), length(ratio))
+  matrix(ratio[disp_matrix + 1], nrow = length(ratio)) * pm
 }
