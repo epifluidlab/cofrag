@@ -12,7 +12,7 @@ bam_filter <-
   function(bam_file,
            map_track,
            output_file,
-           grange,
+           grange = NULL,
            maps_threshold = 0.75,
            mapq_threshold = 30,
            nthreads = 1) {
@@ -20,7 +20,7 @@ bam_filter <-
     n_map_track_1 <- nrow(map_track)
     map_track <- map_track %>% filter(score >= maps_threshold)
     n_map_track_2 <- nrow(map_track)
-    print(sprintf(
+    loginfo(sprintf(
       "Filtering the mappability track, from %d to %d obs",
       n_map_track_1,
       n_map_track_2
@@ -52,7 +52,7 @@ bam_filter <-
           # row$start > end
           break
       }
-      print(sprintf("Qualified mappability coverage: %f", mean(series > 0)))
+      # loginfo(sprintf("Qualified mappability coverage: %f", mean(series > 0)))
       series
     }
     
@@ -73,7 +73,7 @@ bam_filter <-
         foreach (
           chunk_idx = 1:(length(stop_points) - 1),
           .combine = c,
-          .export = "convert_map_track"
+          .export = c("convert_map_track", "loginfo")
         ) %dopar% {
           n1 = stop_points[chunk_idx]
           if (chunk_idx == length(stop_points) - 1)
@@ -95,13 +95,14 @@ bam_filter <-
         bam_records$mapq >= mapq_threshold
       filtered_indexes <- which(filter_flags)
       
-      print(sprintf(
-        "Filtering BAM chunks between coords: %d-%d.",
+      loginfo(sprintf(
+        "Filtering BAM chunks between coords: %d-%d, # of cores: %d.",
         bam_records$pos[1],
-        tail(bam_records$pos, n = 1)
+        tail(bam_records$pos, n = 1),
+        nthreads
       ))
-      print(sprintf("Original total reads: %d", length(bam_records$pos)))
-      print(sprintf("Post Filter #1 reads: %d", length(filtered_indexes)))
+      loginfo(sprintf("Original total reads: %d", length(bam_records$pos)))
+      loginfo(sprintf("Post Filter #1 reads: %d", length(filtered_indexes)))
       
       # Among reads that passes Filter #1, apply Filter #2 based on the mappability score
       
@@ -115,15 +116,17 @@ bam_filter <-
         sapply(bam_records$pos, function(x)
           map_track_roi[x - start_pos + 1] >= maps_threshold)
       
-      print(sprintf("Post Filter #2 reads: %d", sum(filter_flags)))
+      loginfo(sprintf("Post Filter #2 reads: %d", sum(filter_flags)))
       filter_flags
     }
     
-    which <- GRanges(grange)
-    param <- ScanBamParam(which = which,
-                          what = c("flag", "pos", "seq", "isize", "qwidth", "mapq"))
+    scanbam_what <- c("flag", "pos", "seq", "isize", "qwidth", "mapq")
+    param <- if (is.null(grange))
+      ScanBamParam(what = scanbam_what)
+    else
+      ScanBamParam(which <- GRanges(grange), what <- scanbam_what)
     
-    print(sprintf("Start filtering BAM: %s", grange))
+    loginfo(sprintf("Start filtering BAM: %s", grange))
     
     filterBam(
       file = bam_file,
@@ -140,26 +143,27 @@ main <- function(arguments) {
   library(Rsamtools)
   library(stringr)
   
-  match_result <- str_match(arguments$grange, "(chr)?([^.]+):(.+)")
-  chr <- match_result[1, 3]
-  chr_name <- sprintf("chr%s", chr)
-  arguments$grange <- sprintf("%s:%s", chr, match_result[1, 4])
-  print(sprintf("Loading the mappability track for %s...", chr_name))
+  map_track <- annoGR2DF(import(arguments$map_track))
+  if (!is.null(arguments$grange)) {
+    match_result <- str_match(arguments$grange, "(chr)?([^.]+):(.+)")
+    chr <- match_result[1, 3]
+    chr_name <- sprintf("chr%s", chr)
+    arguments$grange <- sprintf("%s:%s", chr, match_result[1, 4])
+    map_track <- map_track %>% filter(chr == chr_name)
+  }
+  map_track <- map_track %>% select(start, end, score)
+  loginfo("Completed loading the mappability track.")
   
-  map_track <-
-    annoGR2DF(import(arguments$map_track)) %>% filter(chr == chr_name) %>% select(start, end, score)
-  print("Completed loading the mappability track.")
-  
-  print(sprintf("Start filtering the BAM file: %s", arguments$bam_file))
-  print(sprintf("Output file: %s", arguments$output_file))
-  print(
+  loginfo(sprintf("Start filtering the BAM file: %s", arguments$bam_file))
+  loginfo(sprintf("Output file: %s", arguments$output_file))
+  loginfo(
     sprintf(
       "With parameters: maps_threshold: %f, mapq_threshold: %f",
       arguments$maps,
       arguments$mapq
     )
   )
-  print(sprintf("Mappability track: %s", arguments$map_track))
+  loginfo(sprintf("Mappability track: %s", arguments$map_track))
   
   bam_filter(
     bam_file =arguments$bam_file,
@@ -209,11 +213,10 @@ process_arguments <- function() {
 main(process_arguments())
 # main(
 #   list(
-#     map_track = "./hg19_mappability/hg19_45_mer.chr22.bw",
-#     # map_track = "./hg19_mappability/hl_chr21_45.bw",
-#     bam_file = "./SRR2129993.chr22.part1.sorted.bam",
-#     output_file = "./filter.bam",
-#     grange = "chr22:1-51304566",
+#     map_track = "results/20200330-week-14/mappability/hs37d5.chr22.45mer.bw",
+#     bam_file = "results/20200406-week-15/bam_filter/bh01.chr22.filtered.bam",
+#     output_file = "results/20200406-week-15/bam_filter/bh01.chr22.final.bam",
+#     # grange = "chr22:1-51304566",
 #     maps = 0.75,
 #     mapq = 30,
 #     nthreads = 1
