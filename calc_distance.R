@@ -362,9 +362,10 @@ pad_block_size <- function(gr, bin_size, block_size) {
   # size will always stay the same, but the range and the block size will be
   # adjusted accordingly
   
-  w <- width(gr)
-  s <- start(gr)
+  # grange start position is round to 1000
+  s <- floor(start(gr) / 1000) * 1000 + 1
   e <- end(gr)
+  w <- e - s + 1
   
   w2 <- ceiling(w / bin_size) * bin_size
   s2 <- s
@@ -374,6 +375,7 @@ pad_block_size <- function(gr, bin_size, block_size) {
   stopifnot(block_size <= w2)
   
   gr2 <- GRanges(gr)
+  start(gr2) <- s2
   end(gr2) <- e2
   
   list(grange = gr2, block_size = block_size)

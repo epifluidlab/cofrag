@@ -24,7 +24,7 @@ main <- function() {
   args <- result$args
   
   if (subcommand == "distance") {
-    source("calc_distance.R")
+    source(here::here("calc_distance.R"))
     dm <- calc_distance(
       bam_file = args$bam_file,
       gr = args$range,
