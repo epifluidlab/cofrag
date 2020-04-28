@@ -116,6 +116,10 @@ ks_distance <- function(s1, s2, min_samples = 1000) {
 
 # Perform a Two-sample K-S test for statistical distance calculation
 cucconi_distance <- function(s1, s2, min_samples = 1000) {
+  source(here::here("src/nonpar/cucconi.test.R"))
+  source(here::here("src/nonpar/cucconi.teststat.R"))
+  source(here::here("src/nonpar/cucconi.dist.perm.R"))
+  source(here::here("src/nonpar/cucconi.dist.boot.R"))
   # We reuqire at least a certain minimal number of samples
   if (min(length(s1), length(s2)) < min_samples)
     NA
@@ -245,13 +249,9 @@ calc_distance_helper <-
     
     loginfo("Calculating the distance matrix")
     
-    
-    source("./nonpar/cucconi.test.R")
-    source("./nonpar/cucconi.teststat.R")
-    source("./nonpar/cucconi.dist.perm.R")
-    source("./nonpar/cucconi.dist.boot.R")
-    
-    
+    total_num_reads <- length(aligned_reads$pos)
+    loginfo(sprintf("Total number of reads: %d", total_num_reads))
+
     gr_name = as.character(seqnames(gr))
     cl <- makeCluster(nthreads)
     registerDoParallel(cl)
@@ -267,10 +267,6 @@ calc_distance_helper <-
           "clip_bfp",
           "ks_distance",
           "cucconi_distance",
-          "cucconi.test",
-          "cucconi.teststat",
-          "cucconi.dist.boot",
-          "cucconi.dist.perm",
           "start",
           "end"
         )
@@ -302,13 +298,30 @@ calc_distance_helper <-
           else if (metrics == "cucconi")
             distance_func = cucconi_distance
           
-          if (is.null(opts$min_samples)) {
+          d <- if (is.null(opts$min_samples)) {
             loginfo("min_samples: NULL")
             distance_func(a, b)
           }
           else {
             loginfo(paste0("min_samples: ", opts$min_samples))
             distance_func(a, b, opts$min_samples)
+          }
+          
+          # normalized the distance based on the number of reads
+          # per Yaping's suggestion on Mar 27, 2020
+          
+          norm_method <- opts$norm_method
+          if (is.na(d))
+            NA
+          else {
+            if (is.null(norm_method) || norm_method == "none")
+              d
+            else if (norm_method == "geometric")
+              d * sqrt(as.numeric(length(a)) * as.numeric(length(b))) / total_num_reads
+            else if (norm_method == "harmonic")
+              d * 1 / (1 / as.numeric(length(a)) + 1 / as.numeric(length(b))) / total_num_reads
+            else
+              stopifnot(FALSE)
           }
         })
       }
@@ -352,6 +365,20 @@ calc_distance_helper <-
     dm
   }
 
+
+infer_full_interval <- function(bam_file, rname=NULL) {
+  # Sometimes we want to inspect the full extent of the BAM file, i.e. we
+  # won't specify a specific GRanges object. In this case, we need to know
+  # the start and the end pos of the full genomic interval in the BAM.
+  #
+  # bam_file: needs to be sorted by position
+  
+  aligned_reads <- scanBam(file = bam_file, param = ScanBamParam(what = c("rname", "pos")))[[1]]
+  
+  data <- tibble(rname = aligned_reads$rname, pos = aligned_reads$pos)
+  data %>% group_by(rname) %>% summarize(start = head(pos, 1), end = tail(pos, 1))
+}
+
 pad_block_size <- function(gr, bin_size, block_size) {
   # The calculation has several requirements for bin_size and block_size:
   #   * The range should be multiples of the bin size
@@ -362,14 +389,15 @@ pad_block_size <- function(gr, bin_size, block_size) {
   # size will always stay the same, but the range and the block size will be
   # adjusted accordingly
   
-  # grange start position is round to 1000
-  s <- floor(start(gr) / 1000) * 1000 + 1
-  e <- end(gr)
-  w <- e - s + 1
+  # grange start position is round to 1000, or bin_size, which is larger
+  interval <- max(1000, bin_size)
+  s <- as.integer(floor(start(gr) / interval) * interval + 1)
+  e <- as.integer(end(gr))
+  w <- as.integer(e - s + 1)
   
-  w2 <- ceiling(w / bin_size) * bin_size
+  w2 <- as.integer(ceiling(as.numeric(w) / bin_size) * bin_size)
   s2 <- s
-  e2 <- s2 + w2 - 1
+  e2 <- as.integer(s2 + w2 - 1)
   block_size <- ceiling(block_size / bin_size) * bin_size
   
   stopifnot(block_size <= w2)
@@ -383,9 +411,9 @@ pad_block_size <- function(gr, bin_size, block_size) {
 
 calc_distance <-
   function(bam_file,
-           gr,
-           bin_size,
-           block_size,
+           gr = NULL,
+           bin_size = 500000,
+           block_size = 500000,
            nthreads = 1,
            metrics = "ks",
            opts = list()) {
@@ -409,6 +437,13 @@ calc_distance <-
     
     # Argument check
     # Both the gr range and block_size should be multiples of bin_size
+    if (is.null(gr)) {
+      loginfo(sprintf("No GRanges information is provided. Infer the interval from the BAM file."))
+      interval <- infer_full_interval(bam_file)
+      # For now we only use the first entry
+      gr <- sprintf("%s:%s-%s", interval[1,]$rname, interval[1,]$start, interval[1,]$end)
+      loginfo(sprintf("Inferred interval: %s", gr))
+    }
     gr <- GRanges(gr)
     padding <- pad_block_size(gr, bin_size, block_size)
     if (!identical(gr, padding$grange) ||
@@ -440,8 +475,8 @@ calc_distance <-
         seqnames(gr),
         format(start(gr), big.mark = ","),
         format(end(gr), big.mark = ","),
-        format(bin_size, big.mark = ","),
-        format(block_size, big.mark = ","),
+        format(as.integer(bin_size), big.mark = ","),
+        format(as.integer(block_size), big.mark = ","),
         nthreads,
         metrics,
         format(if (is.null(opts$min_samples)) "" else opts$min_samples, big.mark = ","),
