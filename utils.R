@@ -95,7 +95,7 @@ matrix_to_short <- function(data, output_file, nthread = 1) {
   }
   stopCluster(cl)
   
-  fileConn <- file(output_file)
+  fileConn <- if (tools::file_ext(output_file) == "gz") gzfile(output_file) else file(output_file)
   writeLines(output_lines, fileConn)
   close(fileConn)
 }

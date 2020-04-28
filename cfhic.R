@@ -24,7 +24,7 @@ main <- function() {
   args <- result$args
   
   if (subcommand == "distance") {
-    source(here::here("calc_distance.R"))
+    source(here::here("src/calc_distance.R"))
     dm <- calc_distance(
       bam_file = args$bam_file,
       gr = args$range,
@@ -34,10 +34,13 @@ main <- function() {
       metrics = args$metrics,
       opts = list(min_samples = args$min_samples, max_frag_size = args$max_frag_size)
     )
+    
+    
     if (!is.null(args$output_file)) {
+      file_conn <- if (tools::file_ext(args$output_file) == "gz") gzfile(args$output_file) else file(args$output_file)
       write.table(
         dm,
-        file = args$output_file,
+        file = file_conn,
         sep = "\t",
         row.names = T,
         col.names = T
@@ -50,8 +53,8 @@ process_dist_args <- function(args) {
   parser <- OptionParser(
     option_list = list(
       make_option(c("--range"), help = "Genomic range of the region under study"),
-      make_option(c("-s", "--bin-size"), help = "Size of each bin in base pairs", type = "integer"),
-      make_option(c("-b", "--block-size"), help = "Size of each block in base pairs", type = "integer"),
+      make_option(c("-s", "--bin-size"), help = "Size of each bin in base pairs", type = "integer", default = 500000),
+      make_option(c("-b", "--block-size"), help = "Size of each block in base pairs", type = "integer", default = 500000),
       make_option(c("-o", "--output-file"), help = "File name for storing the calculated distance matrix", type = "character"),
       make_option(
         c("-m", "--metrics"), 
@@ -61,13 +64,11 @@ process_dist_args <- function(args) {
       make_option(
         c("--min-samples"),
         help = "The minimul number of samples from each bin required to perform the calculation.",
-        default = 1000,
         type = "integer"
       ),
       make_option(
         c("--max-frag-size"),
         help = "Filter out any fragments with larger sizes",
-        default = 240,
         type = "integer"
       ),
       make_option(
