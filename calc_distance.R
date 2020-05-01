@@ -182,7 +182,7 @@ calc_distance_by_block <-
   }
 
 calc_distance_helper <-
-  function(aligned_reads,
+  function(bfp,
            gr,
            bin_size,
            block_size,
@@ -224,20 +224,7 @@ calc_distance_helper <-
       rg
     })
     
-    # Calculate the binned fragmentation profile for the entire genomic range
-    loginfo("Calculating the binned fragmentation profile")
-    if (is.null(opts$max_frag_size)) {
-      loginfo("max_frag_size: NULL")
-      bfp <- calc_bfp(aligned_reads, gr, bin_size)
-    }
-    else {
-      loginfo(paste0("max_frag_size: ", opts$max_frag_size))
-      bfp <- calc_bfp(aligned_reads, gr, bin_size, opts$max_frag_size)
-    }
-    
     # Calculate the distance matrixes block by block. Row first.
-    # dist_matrix_list <- list()
-    
     block_pairs <- list()
     block_idx <- 0
     for (row_idx in 1:block_num) {
@@ -247,10 +234,7 @@ calc_distance_helper <-
       }
     }
     
-    loginfo("Calculating the distance matrix")
-    
-    total_num_reads <- length(aligned_reads$pos)
-    loginfo(sprintf("Total number of reads: %d", total_num_reads))
+    loginfo("Calculating the distance matrix...")
 
     gr_name = as.character(seqnames(gr))
     cl <- makeCluster(nthreads)
@@ -489,5 +473,21 @@ calc_distance <-
               param = ScanBamParam(which = gr,
                                    what = c("pos", "isize")))[[1]]
     
-    calc_distance_helper(aligned_reads, gr, bin_size, block_size, nthreads, opts, metrics = metrics)
+    loginfo(glue::glue("Loaded BAM file {bam_file}"))
+    total_num_reads <- length(aligned_reads$pos)
+    loginfo(glue::glue("Total number of reads: {total_num_reads}"))
+    
+    # Calculate the binned fragmentation profile for the entire genomic range
+    loginfo("Calculating the binned fragmentation profile")
+    if (is.null(opts$max_frag_size)) {
+      loginfo("max_frag_size: NULL")
+      bfp <- calc_bfp(aligned_reads, gr, bin_size)
+    }
+    else {
+      loginfo(paste0("max_frag_size: ", opts$max_frag_size))
+      bfp <- calc_bfp(aligned_reads, gr, bin_size, opts$max_frag_size)
+    }
+    
+    calc_distance_helper(bfp, gr, bin_size, block_size, nthreads, opts,
+                         metrics = metrics)
   }
