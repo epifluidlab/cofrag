@@ -1,8 +1,14 @@
 load_distance_matrix <- function(file_name, distance_cap = NULL, col_row_names = FALSE, chr = NULL, range_start = NULL, bin_size = NULL) {
   # col_row_names: if TRUE, colnames and rownames will be calculated from range_start and bin_size
-  dm <- load_matrix(file_name)
+  dm <- as.matrix(read.table(file_name, as.is = TRUE))
   stopifnot(nrow(dm) == ncol(dm))
-  # Cap entries with extremely large distance
+  
+  # The column names of distance matrices loaded from the file will have different form,
+  # such as X14.19000001, which actually should be 14:19000001.
+  # The row names are always correct.
+  colnames(dm) <- rownames(dm)
+  
+  # Clip entries with extremely large distance
   if (!is.null(distance_cap))
     dm[dm > distance_cap] <- distance_cap
   
@@ -14,16 +20,11 @@ load_distance_matrix <- function(file_name, distance_cap = NULL, col_row_names =
   dm
 }
 
-# Load a matrix from file
-load_matrix <- function(file_name) {
-  dm <- as.matrix(read.table(file_name, as.is = TRUE))
-  colnames(dm) <- rownames(dm)
-  dm
-}
 
 # Load Hi-C "obs" data from file
+# Data format: Juicer Tools dump command
 load_hic_obs <- function(file_name) {
-  hic_data <- as_tibble(read.table(file_name, as.is = T))
+  hic_data <- dplyr::as_tibble(read.table(file_name, header = FALSE, as.is = TRUE))
   colnames(hic_data) <- c("i", "j", "contact")
   hic_data
 }

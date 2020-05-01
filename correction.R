@@ -95,10 +95,17 @@ calc_freq_curve <- function(data, bin_size, nthread = 1) {
 
 calc_prox_curve <- calc_freq_curve
 
-# Load Hi-C data in _obs_data format and get grouped summary
+# Load Hi-C data in _obs_data (Juicer Tools dump) format and calculate the contact freq
+# Hi-C contact frequencies can be computed by group the contact table by the physical
+# distance, and then take the average
 calc_hic_prob <- function(hic_obs) {
   tot <- sum(hic_obs$contact, na.rm = T)
-  hic_obs %>% mutate(dist = abs(i - j)) %>% group_by(dist) %>% summarise(s = sum(contact, na.rm = TRUE)) %>% mutate(dist = dist, prob = s / tot) %>% select(dist, prob)
+  hic_obs %>% 
+    mutate(dist = abs(i - j)) %>% 
+    group_by(dist) %>% 
+    summarise(s = sum(contact, na.rm = TRUE)) %>% 
+    mutate(dist = dist, prob = s / tot) %>% 
+    select(dist, prob)
 }
 
 
