@@ -1,63 +1,99 @@
-Find_na=function(x){
-  na_number=sum(is.na(x)==TRUE)
-  return(na_number)
+source(here::here("genomic_matrix.R"))
+
+
+# Calculate the number of genes in a genomic interval
+.calc_num_genes <- function(gr, gene_density) {
+  helper <- function(interv_chr, interv_start, interv_end) {
+    gene_density %>%
+      filter(chr == as.character(interv_chr) &
+               end > interv_start & start < interv_end) %>% nrow()
+  }
+  
+  sapply(1:length(gr), function(idx) {
+    interval <- gr[idx]
+    helper(
+      GenomicRanges::seqnames(interval),
+      GenomicRanges::start(interval) - 1,
+      GenomicRanges::end(interval)
+    )
+  })
 }
 
-camprt=function(correlation_matrix,gene_density_file_path,chr_name,chr_size,bin_size=500000){
-  library(rtracklayer)
-  library(Repitools)
-  gene_density_data=import.bedGraph(gene_density_file_path)
-  gene_density_data=annoGR2DF(gene_density_data)
+
+# Perform the A/B compartment analysis
+# Parameters:
+#   * gm: a genomic_matrix object
+#   * gene_density: a BED-format data frame of gene annotation
+# Return: a vector indicating the compartment level
+call_compartments <- function(gm, gene_density = NULL) {
+  m <- convert_to_matrix(gm)
+  comp <-
+    prcomp(cor(m, use = "pairwise.complete.obs"),
+           center = TRUE,
+           scale. = TRUE)$rotation[, 1]
   
-  correlation_raw_matrix=correlation_matrix
-  
-  rm_col_location=which(apply(correlation_matrix,1,Find_na)==ncol(correlation_matrix)) #rm col all NA
-  rm_row_location=which(apply(correlation_matrix,2,Find_na)==nrow(correlation_matrix)) #rm row all NA
-  correlation_matrix=correlation_matrix[-rm_row_location,]
-  correlation_matrix=correlation_matrix[,-rm_col_location]
-  
-  PCA_result=prcomp(correlation_matrix)
-  First_eigenvector=PCA_result$rotation[,1]
-  compartment_data=rep(0,ncol(correlation_raw_matrix))
-  compartment_data[-rm_col_location]=First_eigenvector
-  
-  chr_gene_density_data=gene_density_data[which(gene_density_data$chr==chr_name),]
-  whole_genome=rep(0,chr_size)
-  begin_position=1
-  region_gene_number=NULL
-  for(i in 1:nrow(chr_gene_density_data)){
-    i_gene_region=chr_gene_density_data$start[i]:chr_gene_density_data$end[i]
-    whole_genome[i_gene_region]=1 
-  }
-  for(i in 1:ncol(correlation_raw_matrix)){
-    i_fragment_area=((i-1)*bin_size+begin_position):(i*bin_size)
-    i_gene_number=sum(whole_genome[i_fragment_area]==1)
-    region_gene_number=c(region_gene_number,i_gene_number)
-  }
-  
-  negtive_location=which(compartment_data<0)
-  postive_location=which(compartment_data>0)
-  postive_gene_base=sum(region_gene_number[postive_location],na.rm = TRUE)
-  negtive_gene_base=sum(region_gene_number[negtive_location],na.rm=TRUE)
-  postive_gene_density=postive_gene_base/(length(postive_location)*bin_size)
-  negtive_gene_density=negtive_gene_base/(length(negtive_location)*bin_size)
- 
-   if(postive_gene_density<negtive_gene_density){
-    compartment_data[postive_location]=-compartment_data[postive_location]
-    compartment_data[negtive_location]=abs(compartment_data[negtive_location])
+  # Compare the compartment level with gene density and determine whether to flip
+  if (!is.null(gene_density)) {
+    gr_start <- attr(gm, "gr_start")
+    gr_end <- attr(gm, "gr_end")
+    bin_size <- attr(gm, "bin_size")
+    
+    gr <- 1:((gr_end - gr_start) %/% bin_size) %>%
+      map_chr(function(idx) {
+        chr <- as.character(attr(gm, "chr"))
+        start <- gr_start + (idx - 1) * bin_size
+        str_interp("${chr}:$[d]{start + 1}-$[d]{start + bin_size}")
+      }) %>%
+      GenomicRanges::GRanges()
+    
+    gd_cnt <- .calc_num_genes(gr, gene_density)
+    
+    if (cor(comp, gd_cnt) < 0)
+      comp <- -comp
   }
   
-  start_position=0:(nrow(correlation_raw_matrix)-1)
-  start_position=start_position*bin_size+1
-  end_position=1:nrow(correlation_raw_matrix)
-  end_position=end_position*bin_size
-  end_position[nrow(correlation_raw_matrix)]=chr_size
-  chr_name=rep(chr_name,length(end_position))
-  chr_eigenvector=data.frame(chr_name,start_position,end_position,compartment_data)
-  colnames(chr_eigenvector)=c("chr","start","end","score")
-  chr_bedGraph=annoDF2GR(cfDNA_eigenvector)
+  comp
+}
+
+
+call_compartments_cli <- function(options) {
+  gene_annot <- options$genes
+  logdebug(str_interp("Loading gene annotation: ${gene_annot}"))
   
-  compartment_result=list(chr_bedGraph,chr_eigenvector)
-  names(compartment_result)=c("bedGraph","vector")
-  return(compartment_result)
+  conn <- if (endsWith(gene_annot, ".gz")) {
+    gzfile(gene_annot)
+  } else if (endsWith(gene_annot, ".bzip2")) {
+    bzfile(gene_annot)
+  } else {
+    gene_annot
+    # file(gene_annot)
+  }
+  
+  logdebug(str_interp("Loading gene density file from ${gene_annot}..."))
+  gene_density <- read_tsv(
+    conn,
+    col_names = c("chr", "start", "end", "gene"),
+    col_types = list(col_factor(), col_integer(), col_integer(), col_factor())
+  )
+  
+  logdebug("Loading genomic matrix...")
+  gm <- load_genomic_matrix(conn = fifo("/dev/stdin"))
+  
+  logdebug("Calling compartments...")
+  comp <- call_compartments(gm = gm, gene_density = gene_density)
+  
+  # compartment output as BED
+  gr_start <- attr(gm, "gr_start")
+  gr_end <- attr(gm, "gr_end")
+  chr <- attr(gm, "chr")
+  bin_size <- attr(gm, "bin_size")
+  
+  gm_size <- (gr_end - gr_start) %/% bin_size
+  contents <- 1:gm_size %>%
+    map_chr(function(idx) {
+      start <- gr_start + bin_size * (idx - 1) + 1
+      end <- start + bin_size
+      str_interp("${chr}\t$[d]{start}\t$[d]{end}\t${comp[idx]}")
+    })
+  writeLines(contents)
 }
