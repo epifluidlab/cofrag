@@ -128,7 +128,7 @@ ks_distance <- function(s1, s2, min_samples = 100) {
 
 
 # Perform a Two-sample K-S test for statistical distance calculation
-cucconi_distance <- function(s1, s2, min_samples = 1000) {
+cucconi_distance <- function(s1, s2, min_samples = 100) {
   source(here::here("nonpar/cucconi.test.R"))
   source(here::here("nonpar/cucconi.teststat.R"))
   source(here::here("nonpar/cucconi.dist.perm.R"))
@@ -142,12 +142,8 @@ cucconi_distance <- function(s1, s2, min_samples = 1000) {
     if (length(s2) > 10000)
       s2 <- sample(s2, 10000)
     
-    pv <- cucconi.test(s1, s2)$p.value
-    # pv shouldn't be zero
-    min_pv <- 5e-320
-    if (pv < min_pv)
-      pv <- min_pv
-    - log10(pv)
+    score_cap <- -log10(2e-16)
+    min(-log10(cucconi.test(s1, s2)$p.value), score_cap)
   }
 }
 
@@ -272,7 +268,8 @@ calc_distance <-
            block_size = 500000,
            ncores = 1,
            metrics = "ks",
-           opts = list()) {
+           opts = list(),
+           contact = FALSE) {
     
     # Calculate the distance matrix
     # Parameters:
@@ -342,12 +339,16 @@ calc_distance <-
       }
     stopCluster(cl)
     
+    if (contact) {
+      max_score <- max(results$score)
+      results <- results %>% mutate(score = max_score - score)
+    }
     genomic_matrix(results, frag_data[1,]$chr, padded_range$start, padded_range$end, bin_size)
   }
 
 
 # Entrypoint for distance calculation
-calc_distance_cli <- function(options) {
+calc_distance_cli <- function(options, contact = FALSE) {
   loginfo("Command line arguments:")
   loginfo(paste(
     names(options),
@@ -366,7 +367,8 @@ calc_distance_cli <- function(options) {
     block_size = options$`block-size`,
     ncores = options$`num-cores`,
     metrics = options$metrics,
-    opts = list(min_samples = options$`min-samples`)
+    opts = list(min_samples = options$`min-samples`),
+    contact = contact
   )
   
   dump_genomic_matrix(distance_matrix)

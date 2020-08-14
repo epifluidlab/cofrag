@@ -76,18 +76,18 @@ parse_num_mk <- function(s) {
 parse_distance_args <- function(args) {
   parser <- optparse::OptionParser(
     option_list = list(
-      optparse::make_option(c("--range"), help = "Genomic range of the region under study"),
+      # optparse::make_option(c("--range"), help = "Genomic range of the region under study"),
       optparse::make_option(
         c("-s", "--bin-size"),
         help = "Size of each bin in base pairs",
-        default = "50k"
+        default = "500k"
       ),
       optparse::make_option(
         c("-b", "--block-size"),
         help = "Size of each block in base pairs",
-        default = "500k"
+        default = "5m"
       ),
-      optparse::make_option(c("-o", "--output-file"), help = "File name for storing the calculated distance matrix", type = "character"),
+      # optparse::make_option(c("-o", "--output-file"), help = "File name for storing the calculated distance matrix", type = "character"),
       optparse::make_option(c("-m", "--metrics"),
                   help = "The statistical distance metrics. The default is 'ks' for Kolmogorov–Smirnov test.",
                   default = "ks"),
@@ -95,12 +95,12 @@ parse_distance_args <- function(args) {
                   help = "Exclude all fragments with smaller MAPQ scores. Default is 0",
                   type = "integer",
                   default = 0),
-      optparse::make_option(c("--min-samples"),
-                  help = "The minimal number of samples from each bin required to perform the calculation.",
-                  type = "integer"),
+      # optparse::make_option(c("--min-samples"),
+      #             help = "The minimal number of samples from each bin required to perform the calculation.",
+      #             type = "integer"),
       optparse::make_option(c("--max-frag-size"),
-                  help = "Exclude fragments with larger sizes. Default is 500",
-                  default = 500,
+                  help = "Exclude fragments with larger sizes. Default is 1000",
+                  default = 1000,
                   type = "integer"),
       optparse::make_option(
         c("-n", "--num-cores"),
@@ -159,11 +159,17 @@ parse_compartment_args <- function(args) {
 
 switch (subcommand,
         
-        "distance" = (function() {
+        "distance" = {
           logdebug("Calculating distance matrix...")
           source(here::here("calc_distance.R"))
           calc_distance_cli(parse_distance_args(tail(args, n = -1)))
-        })(),
+        },
+        
+        "contact" = {
+          logdebug("Calculating 3D genome contact matrix...")
+          source(here::here("calc_distance.R"))
+          calc_distance_cli(parse_distance_args(tail(args, n = -1)), contact = TRUE)
+        },
         
         "compartment" = {
           logdebug("Calling A/B compartments...")
