@@ -1,3 +1,45 @@
+library(stringr)
+
+# Convert a genomic matrix to BEDPE format
+# A genomic matrix is a matrix representing data associated with paired genomic intervals, such as HiC data
+# row_coords and col_coords are lists which indicate the genomic coordinates. 
+# For example: (chr = "chr22", start = 1000, end = 2000)
+# If row_coords and col_coords are NULL, the information will be inferred from rownames/colnames of data
+genomic_matrix_to_bed <- function(data, con = stdout(), row_coords = NULL, col_coords = NULL) {
+  infer_coords <- function(s) {
+    s <- str_trim(s)
+    # Example: chr22:2,258,501-2,258,750
+    # Notice: 1-based inclusive interval
+    match <- str_match(s, "^([^:]+):([[:digit:],]+)-([[:digit:],]+)$")
+    
+    chr <- match[2]
+    start <- as.integer(str_replace_all(match[3], ",", ""))
+    end <- as.integer(str_replace_all(match[4], ",", ""))
+    if (is.na(match[1]) || !is.integer(start) || !is.integer(end))
+      stop(str_interp("Invalid coords: ${s}"))
+    
+    return(list(chr = chr, start = start, end = end))
+  }
+  
+  if (is.null(row_coords))
+    row_coords <- lapply(rownames(data), infer_coords)
+  if (is.null(col_coords))
+    col_coords <- lapply(colnames(data), infer_coords)
+  
+  # Dump the matrix by column
+  for (col_index in 1:ncol(data)) {
+    cc <- col_coords[[col_index]]
+    for (row_index in 1:nrow(data)) {
+      rc <- row_coords[[row_index]]
+      score <- data[row_index, col_index]
+      
+      line <- paste0(c(cc$chr, cc$start - 1, cc$end, rc$chr, rc$start - 1, rc$end, score), collapse = "\t")
+      writeLines(line, con = con)
+    }
+  }
+}
+
+
 load_distance_matrix <- function(file_name, distance_cap = NULL, col_row_names = FALSE, chr = NULL, range_start = NULL, bin_size = NULL) {
   # col_row_names: if TRUE, colnames and rownames will be calculated from range_start and bin_size
   dm <- as.matrix(read.table(file_name, as.is = TRUE))
