@@ -1,11 +1,7 @@
 #!/usr/bin/env Rscript
 
-library(logging)
-library(tidyverse)
-requireNamespace("optparse")
-
-
-# Determine the R script path and change working directory accordingly
+# Determine the project home directory through the package "here"
+# This results in consistent source/import in the future
 get_script_path <- function() {
   cmd.args <- commandArgs()
   m <- regexpr("(?<=^--file=).+", cmd.args, perl = TRUE)
@@ -16,11 +12,18 @@ get_script_path <- function() {
     stop("can't determine script dir: more than one '--file' argument detected")
   return(script.dir)
 }
+
+original_wd <- getwd()
 setwd(get_script_path())
+requireNamespace("here")
+setwd(original_wd)
 
+library(logging)
+library(tidyverse)
+requireNamespace("optparse")
 
-source(here::here("customized_logging.R"))
-source(here::here("compartment.R"))
+source(here::here("src/customized_logging.R"))
+source(here::here("src/compartment.R"))
 
 
 logReset()
@@ -161,13 +164,13 @@ switch (subcommand,
         
         "distance" = {
           logdebug("Calculating distance matrix...")
-          source(here::here("calc_distance.R"))
+          source(here::here("src/calc_distance.R"))
           calc_distance_cli(parse_distance_args(tail(args, n = -1)))
         },
         
         "contact" = {
           logdebug("Calculating 3D genome contact matrix...")
-          source(here::here("calc_distance.R"))
+          source(here::here("src/calc_distance.R"))
           calc_distance_cli(parse_distance_args(tail(args, n = -1)), contact = TRUE)
         },
         

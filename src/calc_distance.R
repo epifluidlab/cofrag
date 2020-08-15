@@ -11,7 +11,7 @@ library(tidyverse)
 
 requireNamespace("GenomicRanges")
 
-source(here::here("genomic_matrix.R"))
+source(here::here("src/genomic_matrix.R"))
 
 
 # Read fragments data from connection
@@ -129,10 +129,10 @@ ks_distance <- function(s1, s2, min_samples = 100) {
 
 # Perform a Two-sample K-S test for statistical distance calculation
 cucconi_distance <- function(s1, s2, min_samples = 100) {
-  source(here::here("nonpar/cucconi.test.R"))
-  source(here::here("nonpar/cucconi.teststat.R"))
-  source(here::here("nonpar/cucconi.dist.perm.R"))
-  source(here::here("nonpar/cucconi.dist.boot.R"))
+  source(here::here("src/nonpar/cucconi.test.R"))
+  source(here::here("src/nonpar/cucconi.teststat.R"))
+  source(here::here("src/nonpar/cucconi.dist.perm.R"))
+  source(here::here("src/nonpar/cucconi.dist.boot.R"))
   # We reuqire at least a certain minimal number of samples
   if (min(length(s1), length(s2)) < min_samples)
     NA

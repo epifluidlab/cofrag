@@ -1,4 +1,4 @@
-source(here::here("genomic_matrix.R"))
+source(here::here("src/genomic_matrix.R"))
 
 
 # Calculate the number of genes in a genomic interval
