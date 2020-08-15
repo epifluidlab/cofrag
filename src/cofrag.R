@@ -76,7 +76,7 @@ parse_num_mk <- function(s) {
 
 
 # Parse the command line arguments
-parse_distance_args <- function(args) {
+parse_contact_args <- function(args) {
   parser <- optparse::OptionParser(
     option_list = list(
       # optparse::make_option(c("--range"), help = "Genomic range of the region under study"),
@@ -162,16 +162,16 @@ parse_compartment_args <- function(args) {
 
 switch (subcommand,
         
-        "distance" = {
-          logdebug("Calculating distance matrix...")
-          source(here::here("src/calc_distance.R"))
-          calc_distance_cli(parse_distance_args(tail(args, n = -1)))
-        },
+        # "distance" = {
+        #   logdebug("Calculating distance matrix...")
+        #   source(here::here("src/calc_distance.R"))
+        #   calc_distance_cli(parse_contact_args(tail(args, n = -1)))
+        # },
         
         "contact" = {
           logdebug("Calculating 3D genome contact matrix...")
-          source(here::here("src/calc_distance.R"))
-          calc_distance_cli(parse_distance_args(tail(args, n = -1)), contact = TRUE)
+          source(here::here("src/contact_matrix.R"))
+          call_contact_matrix_cli(parse_contact_args(tail(args, n = -1)))
         },
         
         "compartment" = {

@@ -56,6 +56,15 @@ call_compartments <- function(gm, gene_density = NULL) {
 }
 
 
+load_gene_density <- function(conn) {
+  read_tsv(
+    conn,
+    col_names = c("chr", "start", "end", "gene"),
+    col_types = list(col_factor(), col_integer(), col_integer(), col_factor())
+  )
+}
+
+
 call_compartments_cli <- function(options) {
   gene_annot <- options$genes
   logdebug(str_interp("Loading gene annotation: ${gene_annot}"))
@@ -70,11 +79,7 @@ call_compartments_cli <- function(options) {
   }
   
   logdebug(str_interp("Loading gene density file from ${gene_annot}..."))
-  gene_density <- read_tsv(
-    conn,
-    col_names = c("chr", "start", "end", "gene"),
-    col_types = list(col_factor(), col_integer(), col_integer(), col_factor())
-  )
+  gene_density <- load_gene_density(conn)
   
   logdebug("Loading genomic matrix...")
   gm <- load_genomic_matrix(conn = fifo("/dev/stdin"))
