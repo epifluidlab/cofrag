@@ -65,10 +65,21 @@ load_distance_matrix <- function(file_name, distance_cap = NULL, col_row_names =
 
 # Load Hi-C "obs" data from file
 # Data format: Juicer Tools dump command
-load_hic_obs <- function(file_name) {
-  hic_data <- dplyr::as_tibble(read.table(file_name, header = FALSE, as.is = TRUE))
-  colnames(hic_data) <- c("i", "j", "contact")
-  hic_data
+# Return a genomic_matrix object
+load_hic_obs <- function(file_name, chr, bin_size) {
+  hic_data <- read_tsv(file_name, col_names = c("start1", "start2", "score"), col_types = list(
+    col_integer(),
+    col_integer(),
+    col_double()
+  ))
+  
+  coords <- c(hic_data$start1, hic_data$start2)
+  gr_start <- min(coords)
+  gr_end <- max(coords) + bin_size
+  
+  
+  source(here::here("src/genomic_matrix.R"), local = TRUE)
+  genomic_matrix(hic_data, chr = chr, gr_start = gr_start, gr_end = gr_end, bin_size = bin_size)
 }
 
 # Convert a distance matrix to a proximity matrix.
