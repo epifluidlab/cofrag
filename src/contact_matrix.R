@@ -40,7 +40,7 @@ import_fragments <- function(conn) {
   range_end <- tail(frag_data, n = 1)$end
   loginfo(str_interp("Range: ${chr}:${range_start + 1}-${range_end}"))
   
-  frag_data %>% mutate(length = end - start)
+  frag_data %>% mutate(length = end - start, mid = as.integer((end + start) / 2))
 }
 
 
@@ -103,20 +103,23 @@ calc_bfp <-
     # bin2: index of the bin which contains the fragment end
     # cross_bin: logical value indicating whether the fragment straddles across adjacent bins
     frag_data <- frag_data %>% mutate(
-      length = end - start,
-      bin1 = as.integer(.calc_bin_index(start, gr_start, bin_size)),
-      bin2 = as.integer(.calc_bin_index(end - 1, gr_start, bin_size)),
-      cross_bin = (bin1 != bin2)
+      bin = as.integer(.calc_bin_index(mid, gr_start, bin_size))
+      # bin1 = as.integer(.calc_bin_index(start, gr_start, bin_size)),
+      # bin2 = as.integer(.calc_bin_index(end - 1, gr_start, bin_size)),
+      # cross_bin = (bin1 != bin2)
     )
     
-    frag_coll_1 <-
-      frag_data %>% group_by(bin1) %>% summarize(frag_coll = list(list(length, start)))
-    # For cross-bin fragments, group them by bins. When retrieving fragments in
-    # a certain bin, we should not only consider the fragments starting in the
-    # bin, but also those ending in the bin. Thus, we need to combine
-    # frag_coll_1 and frag_coll_2
-    frag_coll_2 <-
-      frag_data %>% filter(cross_bin == TRUE) %>% group_by(bin2) %>% summarize(frag_coll = list(list(length, start)))
+    frag_coll <- 
+      frag_data %>% group_by(bin) %>% summarize(frag_coll = list(list(length, start)))
+    
+    # frag_coll_1 <-
+    #   frag_data %>% group_by(bin1) %>% summarize(frag_coll = list(list(length, start)))
+    # # For cross-bin fragments, group them by bins. When retrieving fragments in
+    # # a certain bin, we should not only consider the fragments starting in the
+    # # bin, but also those ending in the bin. Thus, we need to combine
+    # # frag_coll_1 and frag_coll_2
+    # frag_coll_2 <-
+    #   frag_data %>% filter(cross_bin == TRUE) %>% group_by(bin2) %>% summarize(frag_coll = list(list(length, start)))
     
     # A helper function which retrieve all fragments for a specified bin
     # Properly deal with cases where the bin contains no data
@@ -132,11 +135,12 @@ calc_bfp <-
       bin_idx = seq_along(bin_layout),
       bin_start = bin_layout,
       frag = lapply(seq_along(bin_layout), function(v) {
-        coll1 <- retrieve_frag_coll(frag_coll_1, "bin1", v)
-        coll2 <- retrieve_frag_coll(frag_coll_2, "bin2", v)
-        # Concatenate these two by row-binding
-        
-        list(c(coll1[[1]], coll2[[1]]), c(coll1[[2]], coll2[[2]]))
+        retrieve_frag_coll(frag_coll, "bin", v)
+        # coll1 <- retrieve_frag_coll(frag_coll_1, "bin1", v)
+        # coll2 <- retrieve_frag_coll(frag_coll_2, "bin2", v)
+        # # Concatenate these two by row-binding
+        # 
+        # list(c(coll1[[1]], coll2[[1]]), c(coll1[[2]], coll2[[2]]))
       })
     ))
   }
@@ -257,8 +261,9 @@ call_contact_matrix <-
     source(here::here("src/fraglen_model.R"), local = fraglen_env)
     with(fraglen_env, {
       args <- list(...)
+      metrics <- ifelse(is.null(args$metrics), "ks", args$metrics)
       entryfunc <- function(interval1, interval2) {
-        fraglen_model(bfp, gr, bin_size, interval1, interval2, metrics = args$metrics)
+        fraglen_model(bfp, gr, bin_size, interval1, interval2, metrics)
       }
     })
     models <- list(fraglen = fraglen_env)
