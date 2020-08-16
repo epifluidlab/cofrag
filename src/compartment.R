@@ -32,27 +32,25 @@ call_compartments <- function(gm, gene_density = NULL) {
            center = TRUE,
            scale. = TRUE)$rotation[, 1]
   
+  gr_start <- attr(gm, "gr_start")
+  gr_end <- attr(gm, "gr_end")
+  bin_size <- attr(gm, "bin_size")
+  gr <- 1:((gr_end - gr_start) %/% bin_size) %>%
+    map_chr(function(idx) {
+      chr <- as.character(attr(gm, "chr"))
+      start <- gr_start + (idx - 1) * bin_size
+      str_interp("${chr}:$[d]{start + 1}-$[d]{start + bin_size}")
+    }) %>%
+    GenomicRanges::GRanges()
+  
   # Compare the compartment level with gene density and determine whether to flip
   if (!is.null(gene_density)) {
-    gr_start <- attr(gm, "gr_start")
-    gr_end <- attr(gm, "gr_end")
-    bin_size <- attr(gm, "bin_size")
-    
-    gr <- 1:((gr_end - gr_start) %/% bin_size) %>%
-      map_chr(function(idx) {
-        chr <- as.character(attr(gm, "chr"))
-        start <- gr_start + (idx - 1) * bin_size
-        str_interp("${chr}:$[d]{start + 1}-$[d]{start + bin_size}")
-      }) %>%
-      GenomicRanges::GRanges()
-    
     gd_cnt <- .calc_num_genes(gr, gene_density)
-    
     if (cor(comp, gd_cnt) < 0)
       comp <- -comp
   }
   
-  comp
+  as_tibble(list(start = GenomicRanges::start(gr), end = GenomicRanges::end(gr), score = comp))
 }
 
 
@@ -87,18 +85,15 @@ call_compartments_cli <- function(options) {
   logdebug("Calling compartments...")
   comp <- call_compartments(gm = gm, gene_density = gene_density)
   
-  # compartment output as BED
-  gr_start <- attr(gm, "gr_start")
-  gr_end <- attr(gm, "gr_end")
   chr <- attr(gm, "chr")
-  bin_size <- attr(gm, "bin_size")
   
-  gm_size <- (gr_end - gr_start) %/% bin_size
-  contents <- 1:gm_size %>%
+  contents <- 1:nrow(comp) %>% 
     map_chr(function(idx) {
-      start <- gr_start + bin_size * (idx - 1) + 1
-      end <- start + bin_size
-      str_interp("${chr}\t$[d]{start}\t$[d]{end}\t${comp[idx]}")
+      line <- comp[idx,]
+      start <- line$start + 1
+      end <- line$end
+      score <- line$score
+      str_interp("${chr}\t$[d]{start}\t$[d]{end}\t${score}")
     })
   writeLines(contents)
 }
