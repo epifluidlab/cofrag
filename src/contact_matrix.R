@@ -305,7 +305,16 @@ call_contact_matrix <-
           model$entryfunc(interval1, interval2)
         }
       stopCluster(cl)
-      genomic_matrix(results, as.character(GenomicRanges::seqnames(gr)), GenomicRanges::start(gr) - 1, GenomicRanges::end(gr), bin_size)
+      
+      chr_name <- as.character(GenomicRanges::seqnames(gr))
+      gr_start <- GenomicRanges::start(gr) - 1
+      gr_end <- GenomicRanges::end(gr)
+      
+      gm_gr <- GenomicRanges::GRanges(c(chr_name, chr_name),
+                                      c(IRanges::IRanges(gr_start + 1, gr_end),
+                                        IRanges::IRanges(gr_start + 1, gr_end)))
+      
+      genomic_matrix(results, gm_gr, bin_size)
     })
     names(raw_matrices) <- names(models)
     

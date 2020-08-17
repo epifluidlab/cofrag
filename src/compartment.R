@@ -12,9 +12,9 @@ source(here::here("src/genomic_matrix.R"))
   sapply(1:length(gr), function(idx) {
     interval <- gr[idx]
     helper(
-      GenomicRanges::seqnames(interval),
-      GenomicRanges::start(interval) - 1,
-      GenomicRanges::end(interval)
+      as.character(GenomicRanges::seqnames(interval)),
+      as.integer(GenomicRanges::start(interval) - 1),
+      as.integer(GenomicRanges::end(interval))
     )
   })
 }
@@ -32,12 +32,15 @@ call_compartments <- function(gm, gene_density = NULL) {
            center = TRUE,
            scale. = TRUE)$rotation[, 1]
   
-  gr_start <- attr(gm, "gr_start")
-  gr_end <- attr(gm, "gr_end")
   bin_size <- attr(gm, "bin_size")
+  gr <- attr(gm, "gr")
+  stopifnot(as.character(gr[1]) == as.character(gr[2]))
+  chr <- as.character(GenomicRanges::seqnames(gr))[1]
+  gr_start <- GenomicRanges::start(gr)[1] - 1
+  gr_end <- GenomicRanges::end(gr)[1]
+
   gr <- 1:((gr_end - gr_start) %/% bin_size) %>%
     map_chr(function(idx) {
-      chr <- as.character(attr(gm, "chr"))
       start <- gr_start + (idx - 1) * bin_size
       str_interp("${chr}:$[d]{start + 1}-$[d]{start + bin_size}")
     }) %>%
