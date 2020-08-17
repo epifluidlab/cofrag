@@ -18,31 +18,11 @@ library(tidyverse)
 genomic_matrix <- .new_genomic_matrix
 
 
-#   
-# .new_genomic_matrix1 <-
-#   function(data, row_intervals, col_intervals) {
-#     if (nrow(data) != length(row_intervals) ||
-#         ncol(data) != length(col_intervals))
-#       stop("Mismatched data and interval specification")
-#     
-#     structure(
-#       data,
-#       row_intervals = row_intervals,
-#       col_intervals = col_intervals,
-#       class = "genomic_matrix"
-#     )
-#   }
-# 
-# genomic_matrix <- function(data, row_intervals, col_intervals) {
-#   .new_genomic_matrix(data, row_intervals = row_intervals, col_intervals = col_intervals)
-# }
-
-
 # Serialize a genomic matrix (gm) to BEDPE format (dump order: by column)
 # max_records: limit the number of output records
 # con: a connection for the serialization
 # allow_comments: indicate whether include comment lines in the output
-.serialize_bedpe <- function(gm, allow_comments, max_records, conn = NULL) {
+.serialize_bedpe <- function(gm, allow_comments, max_records, to_short = FALSE, conn = NULL) {
   gr_start <- attr(gm, "gr_start")
   gr_end <- attr(gm, "gr_end")
   bin_size <- attr(gm, "bin_size")
@@ -66,7 +46,10 @@ genomic_matrix <- .new_genomic_matrix
     start2 <- gm[index,]$start2
     score <- gm[index,]$score
     
-    str_interp("${chr}\t$[d]{start1}\t$[d]{start1+bin_size}\t${chr}\t$[d]{start2}\t$[d]{start2+bin_size}\t${score}")
+    if (to_short)
+      str_interp("0\t${chr}\t$[d]{start1}\t0\t0\t${chr}\t$[d]{start2}\t1\t${score}")
+    else
+      str_interp("${chr}\t$[d]{start1}\t$[d]{start1+bin_size}\t${chr}\t$[d]{start2}\t$[d]{start2+bin_size}\t${score}")
   }) 
   contents <- contents %>% paste0(collapse = "\n")
   repr <- append(repr, contents)
@@ -87,6 +70,13 @@ str.genomic_matrix <- function(gm) {
 print.genomic_matrix <- function(gm) {
   cat(.serialize_bedpe(gm, TRUE, 10))
 }
+
+
+# Convert the genomic matrix to Juicer Tools SHORT format
+genomic_matrix_to_short <- function(gm, conn = stdout()) {
+  writeLines(.serialize_bedpe(gm, FALSE, nrow(gm), to_short = TRUE), con = conn)
+}
+
 
 # Output the full genomic matrix to connection
 dump_genomic_matrix <- function(gm, conn = stdout()) {
