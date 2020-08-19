@@ -15,8 +15,9 @@ ks_distance <- function(s1, s2, min_samples = 100) {
   if (min(length(s1), length(s2)) < min_samples)
     return(NA)
   
-  score_cap <- -log10(2e-16)
-  min(-log10(ks.test(s1, s2)$p.value), score_cap)
+  # score_cap <- -log10(2e-16)
+  # min(-log10(ks.test(s1, s2)$p.value), score_cap)
+  ks.test(s1, s2)$p.value
 }
 
 
@@ -35,14 +36,15 @@ cucconi_distance <- function(s1, s2, min_samples = 100) {
     if (length(s2) > 10000)
       s2 <- sample(s2, 10000)
     
-    score_cap <- -log10(2e-16)
-    min(-log10(cucconi.test(s1, s2)$p.value), score_cap)
+    # score_cap <- -log10(2e-16)
+    # min(-log10(cucconi.test(s1, s2)$p.value), score_cap)
+    cucconi.test(s1, s2)$p.value
   }
 }
 
 
 # Calculate the distance matrix between paired intervals
-fraglen_model <- function(bfp, gr, bin_size, interval1, interval2, metrics, ...) {
+fraglen_model <- function(bfp, gr, bin_size, interval1, interval2, metrics = "ks", bootstrap = 1, subsample = NULL, ...) {
   # Argument check
   # gr and intervals should be multiples of bin_size
   stopifnot(all(list(gr, interval1, interval2) %>% map_lgl(function(v) {
@@ -94,14 +96,31 @@ fraglen_model <- function(bfp, gr, bin_size, interval1, interval2, metrics, ...)
     frag2 <- bfp[bin_idx2,]$frag[[1]][[1]]
     bin_start2 <- bfp[bin_idx2,]$bin_start
     
-    score <- distance_func(frag1, frag2)
+    pvalues<- 1:bootstrap %>% map_dbl(function(iter) {
+      if (!is.null(subsample)) {
+        # Only use fix_frag_cnt fragments
+        frag1 <- sample(frag1, subsample, replace = TRUE)
+        frag2 <- sample(frag2, subsample, replace = TRUE)
+        distance_func(frag1, frag2)
+      } else {
+        distance_func(frag1, frag2)
+      }
+    })
+    # scores <- pvalues %>% map_dbl(function(v) -log10(max(c(2e-16, v))))
+    
+    # do.call(rbind, 1:2 %>% map(function(idx) { list(start1 = idx, start2 = idx+1, score = runif(3)) %>% as_tibble() }))
     list(
       start1 = bin_start1,
       start2 = bin_start2,
-      score = score
-    )
+      score = -log10(max(c(2e-16, median(pvalues, na.rm = TRUE)))),
+      pvalue = pvalues,
+      bootstrap_iter = 1:bootstrap,
+      frag_cnt1 = ifelse(is.null(subsample), length(frag1), subsample),
+      frag_cnt2 = ifelse(is.null(subsample), length(frag2), subsample)
+    ) %>% as_tibble()
   })
-  # Build the data frame
-  as_tibble(matrix(unlist(results), ncol = 3, byrow = TRUE)) %>%
-    transmute(start1 = as.integer(V1), start2 = as.integer(V2), score = V3)
+  do.call(rbind, results)
+  # # Build the data frame
+  # as_tibble(matrix(unlist(results), ncol = 3, byrow = TRUE)) %>%
+  #   transmute(start1 = as.integer(V1), start2 = as.integer(V2), score = V3)
 }

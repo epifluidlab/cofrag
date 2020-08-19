@@ -14,7 +14,7 @@ library(tidyverse)
   stopifnot(gr_width[1] == gr_width[2])
   stopifnot(gr_width %% bin_size == 0)
   
-  structure(data %>% select(start1, start2, score),
+  structure(data, # %>% select(start1, start2, score),
             class = c("genomic_matrix", class(data)),
             gr = gr,
             bin_size = bin_size)
@@ -58,8 +58,23 @@ genomic_matrix <- .new_genomic_matrix
     
     if (to_short)
       str_interp("0\t${chr1}\t$[d]{start1}\t0\t0\t${chr2}\t$[d]{start2}\t1\t${score}")
-    else
-      str_interp("${chr1}\t$[d]{start1}\t$[d]{start1+bin_size}\t${chr2}\t$[d]{start2}\t$[d]{start2+bin_size}\t${score}")
+    else {
+      line_out <- 
+        str_interp("${chr1}\t$[d]{start1}\t$[d]{start1+bin_size}\t${chr2}\t$[d]{start2}\t$[d]{start2+bin_size}\t${score}")
+      # If there are additional columns
+      if (ncol(gm) > 3) {
+        line_out <- paste(
+          line_out,
+          "\t",
+          colnames(gm) %>% tail(n = -3) %>%
+            map_chr(function(name) {
+              as.character(gm[index, ][[name]])
+            }) %>%
+            paste0(collapse = "\t")
+        )
+      }
+      line_out
+    }
   }) 
   contents <- contents %>% paste0(collapse = "\n")
   repr <- append(repr, contents)

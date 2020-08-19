@@ -209,12 +209,15 @@ init_models <- function(...) {
 }
 
 
+# Each model is a function(bfp, gr, bin_size, interval1, interval2, ...) {
 call_contact_matrix <-
   function(frag_data,
+           model_envs,
            genome_tracks = NULL,
            bin_size = 500000,
            block_size = 5000000,
            ncores = 1,
+           rng_seed = NULL,
            ...) {
     # Calculate the distance matrix
     # Parameters:
@@ -255,18 +258,33 @@ call_contact_matrix <-
       list(interval1, interval2)
     })
     
+    args <- list(...)
     
-    # Init models
-    fraglen_env <- new.env()
-    source(here::here("src/fraglen_model.R"), local = fraglen_env)
-    with(fraglen_env, {
-      args <- list(...)
-      metrics <- ifelse(is.null(args$metrics), "ks", args$metrics)
-      entryfunc <- function(interval1, interval2) {
-        fraglen_model(bfp, gr, bin_size, interval1, interval2, metrics)
-      }
+    models <- model_envs %>% map(function(model_env) {
+      # Clone and create the working model environment
+      parent.env(model_env) <- environment()
+      working_env <- new.env(parent = model_env)
+      with(working_env, {
+        model_args <- c(list(bfp = bfp, gr = gr, bin_size = bin_size), args)
+        entry <- function(interval1, interval2) {
+          model_args <- c(list(interval1 = interval1, interval2 = interval2), model_args)
+          do.call(model_func, model_args)
+        }
+      })
+      working_env
     })
-    models <- list(fraglen = fraglen_env)
+    names(models) <- names(model_envs)
+    # 
+    # # Init models
+    # fraglen_env <- new.env()
+    # source(here::here("src/fraglen_model.R"), local = fraglen_env)
+    # with(fraglen_env, {
+    #   metrics <- ifelse(is.null(args$metrics), "ks", args$metrics)
+    #   entryfunc <- function(interval1, interval2) {
+    #     fraglen_model(bfp, gr, bin_size, interval1, interval2, metrics)
+    #   }
+    # })
+    # models <- list(fraglen = fraglen_env)
 
     
     raw_matrices <- lapply(names(models), function(model_name) {
@@ -282,10 +300,14 @@ call_contact_matrix <-
         foreach (
           pair_index = 1:length(interval_pairs),
           .combine = "rbind",
-          .export = c("interval_pairs")
+          .export = c("interval_pairs", "rng_seed")
         ) %dopar% {
           library(logging)
           library(tidyverse)
+          
+          if (!is.null(rng_seed)) {
+            set.seed(rng_seed + pair_index)
+          }
 
           # Create a logger for the worker
           logger <- getLogger('worker')
@@ -301,8 +323,8 @@ call_contact_matrix <-
             ),
             logger = "worker"
           )
-
-          model$entryfunc(interval1, interval2)
+          
+          model$entry(interval1, interval2)
         }
       stopCluster(cl)
       
@@ -337,13 +359,21 @@ call_contact_matrix_cli <- function(options) {
     import_fragments(conn = fifo("/dev/stdin")) %>% filter(mapq >= options$`min-mapq` &
                                                               length <= options$`max-frag-size`)
   
+  model_envs <- list(fraglen = new.env())
+  source(here::here("src/fraglen_model.R"), local = model_envs$fraglen)
+  model_envs$fraglen$model_func <- model_envs$fraglen$fraglen_model
+  
   contact_matrix <- call_contact_matrix(
     frag_data,
+    model_envs,
     genome_tracks = NULL,
     bin_size = options$`bin-size`,
     block_size = options$`block-size`,
     ncores = options$`num-cores`,
-    metrics = options$metrics
+    metrics = options$metrics,
+    rng_seed = options$seed,
+    bootstrap = options$bootstrap,
+    subsample = options$subsample
   )
   
   dump_genomic_matrix(contact_matrix)

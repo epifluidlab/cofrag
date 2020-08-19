@@ -108,8 +108,23 @@ parse_contact_args <- function(args) {
       optparse::make_option(
         c("-n", "--num-cores"),
         help = "The number of cores to be used in the computing",
-        default = 1
-      )
+        type = "integer",
+        default = 1),
+      optparse::make_option(
+        c("--seed"),
+        help = "Choose a seed for the random number generator",
+        type = "integer",
+        default = NULL),
+      optparse::make_option(
+        c("--bootstrap"),
+        help = "Number of iterations for bootstrapping. Default is 1 (no bootstrapping)",
+        type = "integer",
+        default = 1),
+      optparse::make_option(
+        c("--subsample"),
+        help = "Number of subsampling",
+        type = "integer",
+        default = NULL)
     )
   )
   
