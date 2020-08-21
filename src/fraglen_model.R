@@ -23,28 +23,22 @@ ks_distance <- function(s1, s2, min_samples = 100) {
 
 # Perform a Two-sample K-S test for statistical distance calculation
 cucconi_distance <- function(s1, s2, min_samples = 100) {
-  source(here::here("src/nonpar/cucconi.test.R"))
-  source(here::here("src/nonpar/cucconi.teststat.R"))
-  source(here::here("src/nonpar/cucconi.dist.perm.R"))
-  source(here::here("src/nonpar/cucconi.dist.boot.R"))
   # We reuqire at least a certain minimal number of samples
   if (min(length(s1), length(s2)) < min_samples)
-    NA
-  else {
-    if (length(s1) > 10000)
-      s1 <- sample(s1, 10000)
-    if (length(s2) > 10000)
-      s2 <- sample(s2, 10000)
-    
-    # score_cap <- -log10(2e-16)
-    # min(-log10(cucconi.test(s1, s2)$p.value), score_cap)
-    cucconi.test(s1, s2)$p.value
-  }
+    return(NA)
+  
+  tpepler.nonpar::cucconi.test(s1, s2)$p.value
 }
 
 
 # Calculate the distance matrix between paired intervals
-fraglen_model <- function(bfp, gr, bin_size, interval1, interval2, metrics = "ks", bootstrap = 1, subsample = NULL, ...) {
+fraglen_model <- function(bfp, gr, bin_size, interval1, interval2, 
+                          metrics = "ks", bootstrap = 1, 
+                          subsample = NULL, ...) {
+  args <- list(...)
+  logger_name <- if (is.null(args$logger)) "worker" else args$logger
+  logger <- getLogger(name = logger_name)
+  
   # Argument check
   # gr and intervals should be multiples of bin_size
   stopifnot(all(list(gr, interval1, interval2) %>% map_lgl(function(v) {
@@ -97,6 +91,11 @@ fraglen_model <- function(bfp, gr, bin_size, interval1, interval2, metrics = "ks
     bin_start2 <- bfp[bin_idx2,]$bin_start
     
     pvalues<- 1:bootstrap %>% map_dbl(function(iter) {
+      if (iter == 1 || iter %% 50 == 0)
+        logdebug(str_interp(
+          "Bootstrap #$[d]{iter}: ${chr_name}:$[d]{bin_start1 + 1}-$[d]{bin_start1 + bin_size} vs. ${chr_name}:$[d]{bin_start2 + 1}-$[d]{bin_start2 + bin_size}"), 
+          logger = logger_name)
+      
       if (!is.null(subsample)) {
         # Only use fix_frag_cnt fragments
         frag1 <- sample(frag1, subsample, replace = TRUE)
@@ -114,7 +113,7 @@ fraglen_model <- function(bfp, gr, bin_size, interval1, interval2, metrics = "ks
       start2 = bin_start2,
       score = -log10(max(c(2e-16, median(pvalues, na.rm = TRUE)))),
       pvalue = pvalues,
-      bootstrap_iter = 1:bootstrap,
+      bootstrap = 1:bootstrap,
       frag_cnt1 = ifelse(is.null(subsample), length(frag1), subsample),
       frag_cnt2 = ifelse(is.null(subsample), length(frag2), subsample)
     ) %>% as_tibble()

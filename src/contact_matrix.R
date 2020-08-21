@@ -136,11 +136,6 @@ calc_bfp <-
       bin_start = bin_layout,
       frag = lapply(seq_along(bin_layout), function(v) {
         retrieve_frag_coll(frag_coll, "bin", v)
-        # coll1 <- retrieve_frag_coll(frag_coll_1, "bin1", v)
-        # coll2 <- retrieve_frag_coll(frag_coll_2, "bin2", v)
-        # # Concatenate these two by row-binding
-        # 
-        # list(c(coll1[[1]], coll2[[1]]), c(coll1[[2]], coll2[[2]]))
       })
     ))
   }
@@ -266,8 +261,9 @@ call_contact_matrix <-
       working_env <- new.env(parent = model_env)
       with(working_env, {
         model_args <- c(list(bfp = bfp, gr = gr, bin_size = bin_size), args)
-        entry <- function(interval1, interval2) {
-          model_args <- c(list(interval1 = interval1, interval2 = interval2), model_args)
+        entry <- function(interval1, interval2, ...) {
+          model_args <- 
+            c(list(interval1 = interval1, interval2 = interval2), model_args, list(...))
           do.call(model_func, model_args)
         }
       })
@@ -310,9 +306,10 @@ call_contact_matrix <-
           }
 
           # Create a logger for the worker
-          logger <- getLogger('worker')
-          addHandler(writeToFile, logger = "worker", file = "/dev/stderr")
-          setLevel(logger_level, container = "worker")
+          logger_name <- str_interp("block$[d]{pair_index}")
+          logger <- getLogger(logger_name)
+          addHandler(writeToFile, logger = logger_name, file = "/dev/stderr")
+          setLevel(logger_level, container = logger_name)
 
           pair <- interval_pairs[[pair_index]]
           interval1 <- pair[[1]]
@@ -321,10 +318,10 @@ call_contact_matrix <-
             str_interp(
               "Processing block #${pair_index} / ${length(interval_pairs)}: ${interval1} vs. ${interval2}"
             ),
-            logger = "worker"
+            logger = logger_name
           )
           
-          model$entry(interval1, interval2)
+          model$entry(interval1, interval2, logger_name)
         }
       stopCluster(cl)
       
