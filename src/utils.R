@@ -66,20 +66,29 @@ load_distance_matrix <- function(file_name, distance_cap = NULL, col_row_names =
 # Load Hi-C "obs" data from file
 # Data format: Juicer Tools dump command
 # Return a genomic_matrix object
-load_hic_obs <- function(file_name, chr, bin_size) {
-  hic_data <- read_tsv(file_name, col_names = c("start1", "start2", "score"), col_types = list(
+load_hic_obs <- function(file, gr = NULL, chr = "foo", bin_size = NULL) {
+  hic_data <- read_tsv(file, col_names = c("start1", "start2", "score"), col_types = list(
     col_integer(),
     col_integer(),
     col_double()
   ))
   
-  coords <- c(hic_data$start1, hic_data$start2)
-  gr_start <- min(coords)
-  gr_end <- max(coords) + bin_size
+  if (is.null(bin_size)) {
+    # Guess the bin_size from data
+    bin_size <- c(hic_data$start1, hic_data$start2) %>% sort() %>% diff() %>% 
+      Filter(f = function(v) v > 0) %>% min()
+  }
   
+  if (is.null(gr)) {
+    # Guess the genomic range
+    gr_start <- min(hic_data$start1, hic_data$start2)
+    gr_end <- max(hic_data$start1, hic_data$start2) + bin_size
+    gr <- GenomicRanges::GRanges(seqnames = chr,
+                                 IRanges::IRanges(rep.int(gr_start + 1, 2), rep.int(gr_end, 2)))
+  }
   
   source(here::here("src/genomic_matrix.R"), local = TRUE)
-  genomic_matrix(hic_data, chr = chr, gr_start = gr_start, gr_end = gr_end, bin_size = bin_size)
+  genomic_matrix(hic_data, gr, bin_size)
 }
 
 # Convert a distance matrix to a proximity matrix.

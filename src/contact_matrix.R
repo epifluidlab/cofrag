@@ -188,7 +188,8 @@ consolidate_models <- function(model_results) {
   m <- model_results[["fraglen"]]
   
   max_score <- max(m$score)
-  m %>% mutate(score = max_score - score)
+  genomic_matrix(m %>% mutate(score = max_score - score), 
+                 gr = attr(m, "gr"), bin_size = attr(m, "bin_size"))
 }
 
 
@@ -321,7 +322,7 @@ call_contact_matrix <-
             logger = logger_name
           )
           
-          model$entry(interval1, interval2, logger_name)
+          model$entry(interval1, interval2, logger = logger_name)
         }
       stopCluster(cl)
       

@@ -109,22 +109,36 @@ dump_genomic_matrix <- function(gm, conn = stdout()) {
 }
 
 
-load_genomic_matrix <- function(conn = stdin(), gr = NULL, bin_size = NULL) {
+load_genomic_matrix <- function(conn = stdin(), additional_col_names = NULL, gr = NULL, bin_size = NULL) {
+  full_col_names <- c(
+    c("chr1", "start1", "end1", "chr2", "start2", "end2", "score"),
+    if (is.null(additional_col_names))
+      character()
+    else
+      additional_col_names)
+  full_col_types <- c(
+    list(
+      col_factor(),
+      col_integer(),
+      col_integer(),
+      col_factor(),
+      col_integer(),
+      col_integer(),
+      col_guess()
+    ),
+    if (is.null(additional_col_names))
+      list()
+    else
+      1:length(additional_col_names) %>% map(function(v)
+        col_guess())
+  )
   gm_bedpe <-
     read_delim(
       conn,
       delim = "\t",
-      col_names = c("chr1", "start1", "end1", "chr2", "start2", "end2", "score"),
-      col_types = cols(
-        col_factor(),
-        col_integer(),
-        col_integer(),
-        col_factor(),
-        col_integer(),
-        col_integer(),
-        col_double()
-      )
-    )
+      col_names = full_col_names,
+      col_types = do.call(cols, full_col_types)
+    ) %>% mutate(score = as.numeric(score))
   
   # Determine chr
   stopifnot(length(levels(gm_bedpe$chr1)) == 1)
@@ -148,7 +162,7 @@ load_genomic_matrix <- function(conn = stdin(), gr = NULL, bin_size = NULL) {
   if (is.null(bin_size))
     bin_size <- with(gm_bedpe[1,], end1 - start1)
   
-  genomic_matrix(gm_bedpe, gr, bin_size)
+  genomic_matrix(gm_bedpe %>% select(-chr1, -end1, -chr2, -end2), gr, bin_size)
 }
 
 convert_to_matrix <- function(gm) {
