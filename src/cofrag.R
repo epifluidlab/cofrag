@@ -30,25 +30,28 @@ logReset()
 writeToConn <- writeToConnFactory(stderr())
 addHandler(writeToConn)
 
-# Parse common options
-parser <- optparse::OptionParser(option_list = list(
-  optparse::make_option(
-    c("-v", "--verbose"),
-    help = "Show verbose messagegs",
-    type = "logical",
-    default = FALSE,
-    action = "store_true"
-  )
-))
-args <-
-  optparse::parse_args(parser,
-             args = commandArgs(trailingOnly = TRUE),
-             positional_arguments = TRUE)
-if (args$options$verbose)
-  setLevel("DEBUG")
+# # Parse common options
+# parser <- optparse::OptionParser(option_list = list(
+#   optparse::make_option(
+#     c("-v", "--verbose"),
+#     help = "Show verbose messagegs",
+#     type = "logical",
+#     default = FALSE,
+#     action = "store_true"
+#   )
+# ))
+# args <-
+#   optparse::parse_args(parser,
+#              args = commandArgs(trailingOnly = TRUE),
+#              positional_arguments = TRUE)
 
-args <- args$args
+# if (args$options$verbose)
+#   setLevel("DEBUG")
+
+# args <- args$args
+args <- commandArgs(trailingOnly = TRUE)
 subcommand <- args[1]
+args <- tail(args, n = -1)
 
 # Parse a numeric string, e.g. 50k, 500K, 10M, 10m, 25.5k, etc.
 parse_num_mk <- function(s) {
@@ -80,6 +83,13 @@ parse_contact_args <- function(args) {
   parser <- optparse::OptionParser(
     option_list = list(
       # optparse::make_option(c("--range"), help = "Genomic range of the region under study"),
+      optparse::make_option(
+        c("--verbose", "-v"),
+        help = "Show verbose messagegs",
+        type = "logical",
+        default = FALSE,
+        action = "store_true"
+      ),
       optparse::make_option(
         c("-s", "--bin-size"),
         help = "Size of each bin in base pairs",
@@ -131,6 +141,9 @@ parse_contact_args <- function(args) {
   args <- optparse::parse_args(parser, args = args, positional_arguments = TRUE)
   options <- args$options
   
+  if (options$verbose)
+    setLevel("DEBUG")
+  
   # Supported distance metrics: ks and cucconi
   stopifnot(options$metrics == "ks" || options$metrics == "cucconi")
   
@@ -176,17 +189,10 @@ parse_compartment_args <- function(args) {
 
 
 switch (subcommand,
-        
-        # "distance" = {
-        #   logdebug("Calculating distance matrix...")
-        #   source(here::here("src/calc_distance.R"))
-        #   calc_distance_cli(parse_contact_args(tail(args, n = -1)))
-        # },
-        
         "contact" = {
           logdebug("Calculating 3D genome contact matrix...")
           source(here::here("src/contact_matrix.R"))
-          call_contact_matrix_cli(parse_contact_args(tail(args, n = -1)))
+          call_contact_matrix_cli(parse_contact_args(args))
         },
         
         "compartment" = {
