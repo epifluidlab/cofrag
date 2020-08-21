@@ -1,15 +1,13 @@
 plot_genomic_matrix <- function(
   gm, scale_factor = c(1, 1), symfill = TRUE, missing_value = NULL, color_palette = "viridis",
-  n.breaks = NULL,
-  xlab = NULL,
-  ylab = NULL,
-  ggtitle = NULL) {
+  n.breaks = NULL) {
+  gr <- attr(gm, "gr")
+  bin_size <- attr(gm, "bin_size")
+  
   # Replace missing values by ...
   if (is.null(missing_value)) {
     new_gm <- gm
   } else {
-    gr <- attr(gm, "gr")
-    bin_size <- attr(gm, "bin_size")
     gr_start1 <- (GenomicRanges::start(gr) - 1)[1]
     gr_start2 <- (GenomicRanges::start(gr) - 1)[2]
     n_bins <- GenomicRanges::width(gr)[1] %/% bin_size
@@ -44,5 +42,6 @@ plot_genomic_matrix <- function(
     geom_tile(color = "black") + 
     scale_x_continuous(labels = scales::number_format(accuracy = 1), n.breaks = n.breaks, position = "top") + 
     scale_y_reverse(labels = scales::number_format(accuracy = 1), n.breaks = n.breaks) + 
-    scale_fill_viridis_c(option = color_palette) + xlab + ylab + ggtitle
+    scale_fill_viridis_c(option = color_palette) +
+    ylab(as.character(gr)[1]) + xlab(as.character(gr)[2])
 }
