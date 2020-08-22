@@ -1,6 +1,10 @@
 plot_genomic_matrix <- function(
-  gm, scale_factor = c(1, 1), symfill = TRUE, missing_value = NULL, color_palette = "viridis",
-  n.breaks = NULL) {
+  gm, scale_factor = c(1, 1), symfill = TRUE, missing_value = NULL, 
+  n.breaks = NULL,
+  color_palette = "viridis",
+  gamma = 1,
+  tile_outline = NULL
+  ) {
   gr <- attr(gm, "gr")
   bin_size <- attr(gm, "bin_size")
   
@@ -37,11 +41,19 @@ plot_genomic_matrix <- function(
     )
   }
   
+  hic_colors <- list(
+    colors = c("#FFFFFF", "#FFF2F2", "#FFE8E8", "#FFCBCB", "#FFB3B3", "#FFA4A4", "#FF6565", "#FF0402"), 
+    values = (c(0, 56, 95, 218, 265, 369, 603, 1033)/1033) ** 0.5)
+  
   ggplot(new_gm %>% mutate(start1 = start1 / scale_factor[1], start2 = start2 / scale_factor[2]),
     aes(x = start1, y = start2, fill = score)) +
-    geom_tile(color = "black") + 
+    (if (is.null(tile_outline)) geom_tile() else geom_tile(color = tile_outline)) +
+    # ifelse(is.null(tile_outline), geom_tile(), geom_tile(color = tile_outline)) +
+    # geom_tile(color = tile_outline) + 
+    # geom_tile(color = "black") + 
     scale_x_continuous(labels = scales::number_format(accuracy = 1), n.breaks = n.breaks, position = "top") + 
     scale_y_reverse(labels = scales::number_format(accuracy = 1), n.breaks = n.breaks) + 
-    scale_fill_viridis_c(option = color_palette) +
+    scale_fill_gradientn(colors = hic_colors$colors, values = hic_colors$values ** gamma) +
+    # scale_fill_viridis_c(values = (seq(0, 10) / 10) ** gamma, option = color_palette) +
     ylab(as.character(gr)[1]) + xlab(as.character(gr)[2])
 }
