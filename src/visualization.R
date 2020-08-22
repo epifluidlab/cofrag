@@ -43,7 +43,7 @@ plot_genomic_matrix <- function(
   
   hic_colors <- list(
     colors = c("#FFFFFF", "#FFF2F2", "#FFE8E8", "#FFCBCB", "#FFB3B3", "#FFA4A4", "#FF6565", "#FF0402"), 
-    values = (c(0, 56, 95, 218, 265, 369, 603, 1033)/1033) ** 0.5)
+    values = (c(0, 56, 95, 218, 265, 369, 603, 1033)/1033) ** 0.45)
   
   ggplot(new_gm %>% mutate(start1 = start1 / scale_factor[1], start2 = start2 / scale_factor[2]),
     aes(x = start1, y = start2, fill = score)) +

@@ -96,7 +96,10 @@ fraglen_model <- function(bfp, gr, bin_size, interval1, interval2,
           "Bootstrap #$[d]{iter}: ${chr_name}:$[d]{bin_start1 + 1}-$[d]{bin_start1 + bin_size} vs. ${chr_name}:$[d]{bin_start2 + 1}-$[d]{bin_start2 + bin_size}"), 
           logger = logger_name)
       
-      if (!is.null(subsample)) {
+      min_sample_cnt <- 10
+      if (list(frag1, frag2) %>% map_int(length) %>% min() < min_sample_cnt)
+        NA
+      else if (!is.null(subsample)) {
         # Only use fix_frag_cnt fragments
         frag1 <- sample(frag1, subsample, replace = TRUE)
         frag2 <- sample(frag2, subsample, replace = TRUE)

@@ -187,7 +187,7 @@ consolidate_models <- function(model_results) {
   # For fraglen models: flip
   m <- model_results[["fraglen"]]
   
-  max_score <- max(m$score)
+  max_score <- -log10(2e-16)
   genomic_matrix(m %>% mutate(score = max_score - score), 
                  gr = attr(m, "gr"), bin_size = attr(m, "bin_size"))
 }
@@ -205,10 +205,18 @@ init_models <- function(...) {
 }
 
 
+.build_default_model_envs <- function() {
+  model_envs <- list(fraglen = new.env())
+  source(here::here("src/fraglen_model.R"), local = model_envs$fraglen)
+  model_envs$fraglen$model_func <- model_envs$fraglen$fraglen_model
+  model_envs
+}
+
+
 # Each model is a function(bfp, gr, bin_size, interval1, interval2, ...) {
 call_contact_matrix <-
   function(frag_data,
-           model_envs,
+           model_envs = NULL,
            genome_tracks = NULL,
            bin_size = 500000,
            block_size = 5000000,
@@ -223,6 +231,9 @@ call_contact_matrix <-
     #     block_size should be multiples of bin_size
     # * ncores: multi-processing
     # * opts: other options for the calculation
+    
+    if (is.null(model_envs))
+      model_envs <- .build_default_model_envs()
     
     # Argument check
     # block_size should be multiple of bin_size
@@ -285,7 +296,7 @@ call_contact_matrix <-
 
     
     raw_matrices <- lapply(names(models), function(model_name) {
-      loginfo(str_interp("Calling contact matrix baed on model: ${model_name}"))
+      loginfo(str_interp("Calling contact matrix based on model: ${model_name}"))
       model <- models[[model_name]]
       
       loginfo(str_interp("Registering cluster for ${ncores} cores"))
@@ -337,6 +348,7 @@ call_contact_matrix <-
       genomic_matrix(results, gm_gr, bin_size)
     })
     names(raw_matrices) <- names(models)
+    loginfo("Finished model evaluation")
     
     consolidate_models(raw_matrices)
   }
@@ -374,5 +386,6 @@ call_contact_matrix_cli <- function(options) {
     subsample = options$subsample
   )
   
+  loginfo("Finished model consolidation. Now start dumping...")
   dump_genomic_matrix(contact_matrix)
 }
