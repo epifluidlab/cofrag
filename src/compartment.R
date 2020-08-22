@@ -25,8 +25,12 @@ source(here::here("src/genomic_matrix.R"))
 #   * gm: a genomic_matrix object
 #   * gene_density: a BED-format data frame of gene annotation
 # Return: a vector indicating the compartment level
-call_compartments <- function(gm, gene_density = NULL) {
+call_compartments <- function(gm, gene_density = NULL, nuance = 0.01) {
   m <- convert_to_matrix(gm)
+  invalid_values <- is.infinite(m) | is.na(m)
+  if (sum(invalid_values) > 0)
+    m[invalid_values] <- rnorm(sum(invalid_values), sd = nuance)
+  
   comp <-
     prcomp(cor(m, use = "pairwise.complete.obs"),
            center = TRUE,
