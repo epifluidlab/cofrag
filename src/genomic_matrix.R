@@ -99,7 +99,8 @@ print.genomic_matrix <- function(gm) {
 
 # Convert the genomic matrix to Juicer Tools SHORT format
 genomic_matrix_to_short <- function(gm, conn = stdout()) {
-  writeLines(.serialize_bedpe(gm, FALSE, nrow(gm), to_short = TRUE), con = conn)
+  gm1 <- gm %>% select(start1, start2, score) %>% filter(is.numeric(score) & is.finite(score))
+  writeLines(.serialize_bedpe(gm1, FALSE, nrow(gm1), to_short = TRUE), con = conn)
 }
 
 
@@ -186,4 +187,20 @@ convert_to_matrix <- function(gm) {
   m[data$idx] <- data$score
   m[data2$idx] <- data2$score
   m
+}
+
+trim_genomic_matrix <- function(gm, gr) {
+  bin_size <- attr(gm, "bin_size")
+  gr1 <- gr[1]
+  gr2 <- if (length(gr) >= 2) gr[2] else gr1
+  stopifnot(all(list(gr1, gr2) %>% map_lgl(function(v) {
+    GenomicRanges::width(v) %% bin_size == 0
+    })))
+  stopifnot(GenomicRanges::width(gr1) == GenomicRanges::width(gr2))
+  
+  limits <- list(gr1, gr2) %>% map(function(v) c(GenomicRanges::start(v) - 1, GenomicRanges::end(v)))
+  
+  gm %>% as_tibble() %>% 
+    filter(between(start1, limits[[1]][1], limits[[1]][2]) & between(start2, limits[[2]][1], limits[[2]][2])) %>%
+    genomic_matrix(gr = GenomicRanges::GRanges(list(gr1, gr2) %>% map_chr(as.character)), bin_size = bin_size)
 }
