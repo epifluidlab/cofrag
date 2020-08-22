@@ -188,7 +188,7 @@ consolidate_models <- function(model_results) {
   m <- model_results[["fraglen"]]
   
   max_score <- -log10(2e-16)
-  genomic_matrix(m %>% mutate(score = max_score - score), 
+  genomic_matrix(m %>% mutate(score = max_score - score, score2 = max_score - score2), 
                  gr = attr(m, "gr"), bin_size = attr(m, "bin_size"))
 }
 
