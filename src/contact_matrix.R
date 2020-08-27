@@ -4,6 +4,7 @@ library(foreach)
 library(doParallel)
 library(logging)
 library(tidyverse)
+library(logging)
 requireNamespace("GenomicRanges")
 
 
@@ -103,6 +104,7 @@ calc_bfp <-
     # bin2: index of the bin which contains the fragment end
     # cross_bin: logical value indicating whether the fragment straddles across adjacent bins
     frag_data <- frag_data %>% mutate(
+      mid = (start + end) %/% 2,
       bin = as.integer(.calc_bin_index(mid, gr_start, bin_size))
       # bin1 = as.integer(.calc_bin_index(start, gr_start, bin_size)),
       # bin2 = as.integer(.calc_bin_index(end - 1, gr_start, bin_size)),
