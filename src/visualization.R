@@ -1,6 +1,7 @@
 plot_genomic_matrix <- function(gm,
+                                control_gm = NULL,
                                 scale_factor = c(1, 1),
-                                symfill = TRUE,
+                                # symfill = TRUE,
                                 missing_value = NULL,
                                 n.breaks = NULL,
                                 color_palette = "viridis",
@@ -33,16 +34,25 @@ plot_genomic_matrix <- function(gm,
     })
   }
   
-  if (symfill) {
-    new_gm <- rbind(
-      as_tibble(new_gm),
-      as_tibble(new_gm) %>% filter(start1 != start2) %>%
+  build_full_gm <- function(gm1, gm2) {
+    rbind(
+      as_tibble(gm1),
+      as_tibble(gm2) %>% filter(start1 != start2) %>%
         mutate(
           s = start1 + start2,
           start1 = (s - start1),
           start2 = (s - start2)
         ) %>% select(-s)
     )
+  }
+  
+  if (is.null(control_gm)) {
+    new_gm <- build_full_gm(gm1 = gm, gm2 = new_gm)
+  } else {
+    # Ensure the dimensions are compatible
+    # stopifnot(all(attr(gm, "gr") == attr(control_gm, "gr")))
+    stopifnot(attr(gm, "bin_size") == attr(control_gm, "bin_size"))
+    new_gm <- build_full_gm(gm1 = control_gm, gm2 = gm)
   }
   
   hic_colors <- list(
@@ -70,9 +80,6 @@ plot_genomic_matrix <- function(gm,
       geom_tile()
      else
        geom_tile(color = tile_outline)) +
-    # ifelse(is.null(tile_outline), geom_tile(), geom_tile(color = tile_outline)) +
-    # geom_tile(color = tile_outline) +
-    # geom_tile(color = "black") +
     scale_x_continuous(
       labels = scales::number_format(accuracy = 1),
       n.breaks = n.breaks,
@@ -81,16 +88,21 @@ plot_genomic_matrix <- function(gm,
     scale_y_reverse(labels = scales::number_format(accuracy = 1),
                     n.breaks = n.breaks) +
     scale_fill_gradientn(colors = hic_colors$colors, values = hic_colors$values ** gamma) +
-    # scale_fill_viridis_c(values = (seq(0, 10) / 10) ** gamma, option = color_palette) +
-    ylab(as.character(gr)[1]) + xlab(as.character(gr)[2])
+    ylab(paste0(
+      ifelse(is.null(control_gm), "", "Control: "), as.character(gr)[1])) + 
+    xlab(as.character(gr)[2])
 }
 
 
 # Plot the A/B compartment profile
 plot_compartments <- function(data) {
-  data %>% 
-    mutate(type = ifelse(score > 0, "open", "close")) %>%
-    ggplot(aes(x = start, y = score, fill = type)) + 
-    scale_x_continuous(labels = scales::comma) + 
-    geom_col(position = "identity")
+  resolution <- data %>% .$start %>% diff() %>% min()
+  data %>%
+    mutate(compartment = factor(
+      ifelse(score > 0, "open", "close"), levels = c("open", "close"))) %>%
+    
+    ggplot(aes(x = start, y = score, fill = compartment)) +
+    geom_col(width = resolution * .75) +
+    scale_x_continuous(labels = scales::comma) +
+    xlab("coordinate")
 }
