@@ -45,7 +45,8 @@ genomic_matrix <- .new_genomic_matrix
     gr_end2 <- GenomicRanges::end(gr)[2]
     repr <- append(repr, c(
       str_interp("# A genomic matrix: $[d]{gm_size} x $[d]{gm_size}"),
-      str_interp("# Genomic range: ${chr1}:$[d]{gr_start1 + 1}-$[d]{gr_end1} vs. ${chr2}:$[d]{gr_start2 + 1}-$[d]{gr_end2}")
+      str_interp("# Genomic range: ${chr1}:$[d]{gr_start1 + 1}-$[d]{gr_end1} vs. ${chr2}:$[d]{gr_start2 + 1}-$[d]{gr_end2}"),
+      str_interp("# Bin size: ${bin_size}")
     ))
   }
   

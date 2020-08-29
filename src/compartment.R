@@ -24,17 +24,22 @@ source(here::here("src/genomic_matrix.R"))
 # Parameters:
 #   * gm: a genomic_matrix object
 #   * gene_density: a BED-format data frame of gene annotation
+#   * input_as_cor: if TRUE, the input gm is already a correlation matrix, so that we can 
+#                   skip calling cor()
 # Return: a vector indicating the compartment level
-call_compartments <- function(gm, gene_density = NULL, nuance = 0.01) {
+call_compartments <- function(gm, input_as_cor = FALSE, gene_density = NULL, nuance = 0.01) {
   m <- convert_to_matrix(gm)
   invalid_values <- is.infinite(m) | is.na(m)
   if (sum(invalid_values) > 0)
     m[invalid_values] <- rnorm(sum(invalid_values), sd = nuance)
   
   comp <-
-    prcomp(cor(m, use = "pairwise.complete.obs"),
-           center = TRUE,
-           scale. = TRUE)$rotation[, 1]
+    prcomp(
+      # if (input_as_cor) m else cor(m, use = "pairwise.complete.obs"),
+      if (input_as_cor) m else cor(m, use = "pairwise.complete.obs", method = "pearson"),
+           center = TRUE
+           # scale. = TRUE
+      )$rotation[, 1]
   
   bin_size <- attr(gm, "bin_size")
   gr <- attr(gm, "gr")
