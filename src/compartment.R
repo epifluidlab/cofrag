@@ -123,3 +123,26 @@ call_compartments_cli <- function(options) {
     })
   writeLines(contents)
 }
+
+
+calc_pearson_correlation <- function(comp1, comp2, use = "everything") {
+  # Check validity
+  bin_size1 <- (comp1$end - comp1$start) %>% unique()
+  bin_size2 <- (comp2$end - comp2$start) %>% unique()
+  stopifnot(length(bin_size1) == 1 && length(bin_size2) == 1 && bin_size1[1] == bin_size2[1])
+  bin_size = bin_size1[1]
+  
+  # Align the two compartment dataset
+  comp1 <- comp1 %>% mutate(bin_idx = start %/% bin_size) %>% 
+    filter(!is.na(score))
+  comp2 <- comp2 %>% mutate(bin_idx = start %/% bin_size) %>%
+    filter(!is.na(score))
+  
+  common_bins <- intersect(comp1$bin_idx, comp2$bin_idx)
+  comp1 <- comp1 %>% filter(bin_idx %in% common_bins)
+  comp2 <- comp2 %>% filter(bin_idx %in% common_bins)
+  
+  cor(comp1$score, comp2$score, use = use)
+}
+
+
