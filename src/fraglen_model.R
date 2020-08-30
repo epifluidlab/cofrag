@@ -13,11 +13,15 @@ ks_distance <- function(s1, s2, min_samples = 100) {
   # The minimal meaningful p-value is (< 2e-16). The corresponding -log10 value is 15.7
   # Therefore, here we limit the score range to [0, 15.7)
   if (min(length(s1), length(s2)) < min_samples)
-    return(NA)
+    return(list(score = NA, pvalue = NA))
   
   # score_cap <- -log10(2e-16)
   # min(-log10(ks.test(s1, s2)$p.value), score_cap)
-  ks.test(s1, s2)$p.value
+  pv <- ks.test(s1, s2)$p.value
+  list(
+    score = -log10(2e-16) + log10(max(2e-16, pv)),
+    pvalue = pv
+  )
 }
 
 
@@ -25,9 +29,102 @@ ks_distance <- function(s1, s2, min_samples = 100) {
 cucconi_distance <- function(s1, s2, min_samples = 100) {
   # We reuqire at least a certain minimal number of samples
   if (min(length(s1), length(s2)) < min_samples)
-    return(NA)
+    return(list(score = NA, pvalue = NA))
   
-  tpepler.nonpar::cucconi.test(s1, s2)$p.value
+  pv <- tpepler.nonpar::cucconi.test(s1, s2)$p.value
+  list(
+    score = -log10(2e-16) + log10(max(2e-16, pv)),
+    pvalue = pv
+  )
+}
+
+
+# Calculate the total variance distance
+tv_distance <- function(s1, s2, 
+                        length_from = 100,
+                        length_to = 350,
+                        min_samples = 100) {
+  if (min(length(s1), length(s2)) < min_samples)
+    return(list(score = NA))
+  
+  pdfs <- list(s1, s2) %>% map(~ {
+    s <- .x
+    cdf <- ecdf(s)
+    data <- length_from:length_to %>% map_dbl(cdf)
+    tail(data, n = -1) - head(data, n = -1)
+  })
+  
+  list(score = max(abs(pdfs[[1]] - pdfs[[2]])))
+}
+
+
+ks_stat_distance <- function(s1, s2, 
+                        length_from = 100,
+                        length_to = 350,
+                        min_samples = 100) {
+  if (min(length(s1), length(s2)) < min_samples)
+    return(list(score = NA))
+  
+  cdfs <- list(s1, s2) %>% map(~ {
+    s <- .x
+    cdf <- ecdf(s)
+    length_from:length_to %>% map_dbl(cdf)
+  })
+  
+  list(score = max(abs(cdfs[[1]] - cdfs[[2]])))
+}
+
+cvm_stat_distance <- function(s1, s2, 
+                           length_from = 100,
+                           length_to = 350,
+                           min_samples = 100) {
+  if (min(length(s1), length(s2)) < min_samples)
+    return(list(score = NA))
+  
+  cdfs <- list(s1, s2) %>% map(~ {
+    s <- .x
+    cdf <- ecdf(s)
+    length_from:length_to %>% map_dbl(cdf)
+  })
+  
+  list(score = (cdfs[[1]] - cdfs[[2]]) ** 2 %>% sum())
+}
+
+ad_stat_distance <- function(s1, s2, 
+                              length_from = 100,
+                              length_to = 350,
+                              min_samples = 100) {
+  if (min(length(s1), length(s2)) < min_samples)
+    return(list(score = NA))
+  
+  cdfs <- list(s1, s2) %>% map(~ {
+    s <- .x
+    cdf <- ecdf(s)
+    length_from:length_to %>% map_dbl(cdf)
+  })
+  
+  a = (cdfs[[1]] - cdfs[[2]]) ** 2
+  b = cdfs[[1]] * (1 - cdfs[[2]])
+  non_zeros = (b != 0)
+  list(score = sum(a[non_zeros] / b[non_zeros]))
+  # sum(a)
+}
+
+cucconi_stat_distance <- function(s1, s2) {
+  x = s1
+  y = s2
+  m = length(x)
+  n = length(y)
+  
+  N <- m + n
+  S <- rank(c(x, y))[(m + 1):N]
+  denom <- sqrt(m * n * (N + 1) * (2 * N + 1) * (8 * N + 11) / 5)
+  U <- (6 * sum(S^2) - n * (N + 1) * (2 * N + 1)) / denom
+  V <- (6 * sum((N + 1 - S)^2) - n * (N + 1) * (2 * N + 1)) / denom
+  rho <- (2 * (N^2 - 4)) / ((2 * N + 1) * (8 * N + 11)) - 1
+  C <- (U^2 + V^2 - 2 * rho * U * V) / (2 * (1 - rho^2))
+  
+  list(score = C)
 }
 
 
@@ -58,6 +155,11 @@ fraglen_model <- function(bfp, gr, bin_size, interval1, interval2,
   distance_func <- switch(metrics,
                           "ks" = ks_distance,
                           "cucconi" = cucconi_distance,
+                          "cucconi.stat" = cucconi_stat_distance,
+                          "tv" = tv_distance,
+                          "ks.stat" = ks_stat_distance,
+                          "cvm.stat" = cvm_stat_distance,
+                          "ad.stat" = ad_stat_distance,
                           stop(str_interp("Invalid metrics: ${metrics}")))
   
   # Bin index list for each interval
@@ -81,7 +183,7 @@ fraglen_model <- function(bfp, gr, bin_size, interval1, interval2,
   # logdebug(str_interp("# of fragments in each interval: ${num_frag_interval1} vs. ${num_frag_interval2}"), logger = "worker")
   # logdebug(str_interp("# of paired bins: ${nrow(paired_bins)}"), logger = "worker")
   
-  results <- 1:nrow(paired_bins) %>% map(function(row_idx) {
+  1:nrow(paired_bins) %>% map_dfr(function(row_idx) {
     bin_idx1 <- paired_bins[row_idx,]$bin1
     bin_idx2 <- paired_bins[row_idx,]$bin2
     
@@ -90,40 +192,29 @@ fraglen_model <- function(bfp, gr, bin_size, interval1, interval2,
     frag2 <- bfp[bin_idx2,]$frag[[1]][[1]]
     bin_start2 <- bfp[bin_idx2,]$bin_start
     
-    pvalues<- 1:bootstrap %>% map_dbl(function(iter) {
-      if (iter == 1 || iter %% 50 == 0)
+    1:bootstrap %>% map_dfr(function(iter) {
+      if (iter == 1 || iter %% 5 == 0)
         logdebug(str_interp(
           "Bootstrap #$[d]{iter}: ${chr_name}:$[d]{bin_start1 + 1}-$[d]{bin_start1 + bin_size} vs. ${chr_name}:$[d]{bin_start2 + 1}-$[d]{bin_start2 + bin_size}"), 
           logger = logger_name)
       
-      min_sample_cnt <- 10
-      if (list(frag1, frag2) %>% map_int(length) %>% min() < min_sample_cnt)
-        NA
-      else if (!is.null(subsample)) {
+      if (!is.null(subsample)) {
         # Only use fix_frag_cnt fragments
         frag1 <- sample(frag1, subsample, replace = TRUE)
         frag2 <- sample(frag2, subsample, replace = TRUE)
-        distance_func(frag1, frag2)
-      } else {
-        distance_func(frag1, frag2)
       }
-    })
-    # scores <- pvalues %>% map_dbl(function(v) -log10(max(c(2e-16, v))))
-    
-    # do.call(rbind, 1:2 %>% map(function(idx) { list(start1 = idx, start2 = idx+1, score = runif(3)) %>% as_tibble() }))
-    list(
-      start1 = bin_start1,
-      start2 = bin_start2,
-      score = -log10(max(c(2e-16, median(pvalues, na.rm = TRUE)))),
-      score2 = -log10(pmax(2e-16, pvalues)),
-      pvalue = pvalues,
-      bootstrap = 1:bootstrap,
-      frag_cnt1 = ifelse(is.null(subsample), length(frag1), subsample),
-      frag_cnt2 = ifelse(is.null(subsample), length(frag2), subsample)
-    ) %>% as_tibble()
+      distance_func(frag1, frag2) %>% as_tibble() %>% mutate(
+        bootstrap = as.integer(iter),
+        frag_cnt1 = length(frag1),
+        frag_cnt2 = length(frag2)
+        )
+    }) %>%
+      mutate(
+        start1 = bin_start1,
+        start2 = bin_start2,
+        score2 = score,
+        score = median(score2, na.rm = TRUE)
+      ) %>%
+      select(start1, start2, score, score2, bootstrap, frag_cnt1, frag_cnt2, everything())
   })
-  do.call(rbind, results)
-  # # Build the data frame
-  # as_tibble(matrix(unlist(results), ncol = 3, byrow = TRUE)) %>%
-  #   transmute(start1 = as.integer(V1), start2 = as.integer(V2), score = V3)
 }
