@@ -27,10 +27,14 @@ source(here::here("src/genomic_matrix.R"))
 #   * input_as_cor: if TRUE, the input gm is already a correlation matrix, so that we can 
 #                   skip calling cor()
 # Return: a vector indicating the compartment level
-call_compartments <- function(gm, input_as_cor = FALSE, gene_density = NULL, nuance = 0.01) {
+call_compartments <- function(gm, 
+                              input_as_cor = FALSE, 
+                              gene_density = NULL, 
+                              nuance = NULL,
+                              center = TRUE) {
   m <- convert_to_matrix(gm)
   invalid_values <- is.infinite(m) | is.na(m)
-  if (sum(invalid_values) > 0)
+  if (sum(invalid_values) > 0 & !is.null(nuance))
     m[invalid_values] <- rnorm(sum(invalid_values), sd = nuance)
   
   comp <-
@@ -62,7 +66,17 @@ call_compartments <- function(gm, input_as_cor = FALSE, gene_density = NULL, nua
       comp <- -comp
   }
   
-  as_tibble(list(start = GenomicRanges::start(gr), end = GenomicRanges::end(gr), score = comp))
+  result <- list(
+    start = GenomicRanges::start(gr) - 1, 
+    end = GenomicRanges::end(gr), 
+    score = comp) %>%
+    as_tibble()
+  
+  if (center) {
+    return(result %>% mutate(score = score - mean(score, na.rm = TRUE)))
+  } else {
+    return(result)
+  }
 }
 
 
