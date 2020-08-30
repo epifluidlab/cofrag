@@ -187,10 +187,7 @@ calc_bfp <-
 
 consolidate_models <- function(model_results) {
   # For fraglen models: flip
-  m <- model_results[["fraglen"]]
-  
-  max_score <- -log10(2e-16)
-  m %>% mutate(score = max_score - score, score2 = max_score - score2)
+  model_results[["fraglen"]]
 }
 
 

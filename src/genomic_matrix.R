@@ -202,6 +202,7 @@ trim_genomic_matrix <- function(gm, gr) {
   limits <- list(gr1, gr2) %>% map(function(v) c(GenomicRanges::start(v) - 1, GenomicRanges::end(v)))
   
   gm %>% as_tibble() %>% 
-    filter(between(start1, limits[[1]][1], limits[[1]][2]) & between(start2, limits[[2]][1], limits[[2]][2])) %>%
+    filter(start1 >= limits[[1]][1] & start1 + bin_size <= limits[[1]][2]) %>%
+    filter(start2 >= limits[[2]][1] & start2 + bin_size <= limits[[2]][2]) %>%
     genomic_matrix(gr = GenomicRanges::GRanges(list(gr1, gr2) %>% map_chr(as.character)), bin_size = bin_size)
 }
