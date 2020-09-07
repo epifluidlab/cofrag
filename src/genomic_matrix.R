@@ -107,7 +107,20 @@ genomic_matrix_to_short <- function(gm, conn = stdout()) {
 
 # Output the full genomic matrix to connection
 dump_genomic_matrix <- function(gm, conn = stdout()) {
-  writeLines(.serialize_bedpe(gm, FALSE, nrow(gm)), con = conn)
+  gr <- attr(gm, "gr")
+  chr1 <- as.character(GenomicRanges::seqnames(gr)[1])
+  chr2 <- as.character(GenomicRanges::seqnames(gr)[2])
+  bin_size <- attr(gm, "bin_size")
+  
+  gm %>%
+    mutate(
+      chr1 = chr1,
+      end1 = start1 + bin_size,
+      chr2 = chr2,
+      end2 = start2 + bin_size
+    ) %>%
+    select(chr1, start1, end1, chr2, start2, end2, score, everything()) %>%
+    write_tsv(path = conn, col_names = FALSE)
 }
 
 

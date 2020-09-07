@@ -367,13 +367,13 @@ call_contact_matrix_cli <- function(options) {
     import_fragments(conn = fifo("/dev/stdin")) %>% filter(mapq >= options$`min-mapq` &
                                                               length <= options$`max-frag-size`)
   
-  model_envs <- list(fraglen = new.env())
-  source(here::here("src/fraglen_model.R"), local = model_envs$fraglen)
-  model_envs$fraglen$model_func <- model_envs$fraglen$fraglen_model
+  # model_envs <- list(fraglen = new.env())
+  # source(here::here("src/fraglen_model.R"), local = model_envs$fraglen)
+  # model_envs$fraglen$model_func <- model_envs$fraglen$fraglen_model
   
   contact_matrix <- call_contact_matrix(
     frag_data,
-    model_envs,
+    # model_envs,
     genome_tracks = NULL,
     bin_size = options$`bin-size`,
     block_size = options$`block-size`,

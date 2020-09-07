@@ -31,7 +31,8 @@ call_compartments <- function(gm,
                               input_as_cor = FALSE, 
                               gene_density = NULL, 
                               nuance = NULL,
-                              center = TRUE) {
+                              center = TRUE,
+                              rollmean_width = NULL) {
   m <- convert_to_matrix(gm)
   invalid_values <- is.infinite(m) | is.na(m)
   if (sum(invalid_values) > 0 & !is.null(nuance))
@@ -73,10 +74,15 @@ call_compartments <- function(gm,
     as_tibble()
   
   if (center) {
-    return(result %>% mutate(score = score - mean(score, na.rm = TRUE)))
-  } else {
-    return(result)
+    result <- result %>% mutate(score = score - mean(score, na.rm = TRUE))
   }
+  
+  if (!is.null(rollmean_width)) {
+    result <- result %>% 
+      mutate(score = zoo::rollmean(score, rollmean_width, fill = NA))
+  }
+  
+  return(result)
 }
 
 

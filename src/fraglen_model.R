@@ -192,6 +192,10 @@ fraglen_model <- function(bfp, gr, bin_size, interval1, interval2,
     frag2 <- bfp[bin_idx2,]$frag[[1]][[1]]
     bin_start2 <- bfp[bin_idx2,]$bin_start
     
+    min_frag_num <- 100
+    if (min(length(frag1), length(frag2)) < min_frag_num)
+      return(NULL)
+    
     1:bootstrap %>% map_dfr(function(iter) {
       if (iter == 1 || iter %% 5 == 0)
         logdebug(str_interp(
