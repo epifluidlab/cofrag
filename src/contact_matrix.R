@@ -260,7 +260,7 @@ call_contact_matrix <-
           GenomicRanges::seqnames(gr),
           str_interp("${pair[['start2']] + 1}-${pair[['end2']]}")
         )
-      list(interval1, interval2)
+      list(interval1, interval2, idx)
     })
     
     args <- list(...)
@@ -300,17 +300,21 @@ call_contact_matrix <-
       loginfo(str_interp("Registering cluster for ${ncores} cores"))
       logger_level <- getLogger()[['level']]
       
+      n_interval_pairs <- length(interval_pairs)
+      
       cl <- makeCluster(ncores)
       registerDoParallel(cl)
       results <-
         foreach (
-          pair_index = 1:length(interval_pairs),
+          pair = interval_pairs,
+          # pair_index = 1:length(interval_pairs),
           .combine = "rbind",
-          .export = c("interval_pairs", "rng_seed")
+          .export = c("rng_seed", "n_interval_pairs")
         ) %dopar% {
           library(logging)
           library(tidyverse)
           
+          pair_index <- pair[[3]]
           if (!is.null(rng_seed)) {
             set.seed(rng_seed + pair_index)
           }
@@ -321,12 +325,12 @@ call_contact_matrix <-
           addHandler(writeToFile, logger = logger_name, file = "/dev/stderr")
           setLevel(logger_level, container = logger_name)
 
-          pair <- interval_pairs[[pair_index]]
+          # pair <- interval_pairs[[pair_index]]
           interval1 <- pair[[1]]
           interval2 <- pair[[2]]
           loginfo(
             str_interp(
-              "Processing block #${pair_index} / ${length(interval_pairs)}: ${interval1} vs. ${interval2}"
+              "Processing block #${pair_index} / ${n_interval_pairs}: ${interval1} vs. ${interval2}"
             ),
             logger = logger_name
           )
