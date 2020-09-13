@@ -24,27 +24,38 @@ source(here::here("src/genomic_matrix.R"))
 # Parameters:
 #   * gm: a genomic_matrix object
 #   * gene_density: a BED-format data frame of gene annotation
-#   * input_as_cor: if TRUE, the input gm is already a correlation matrix, so that we can 
-#                   skip calling cor()
+#   * pc_compartment: indicates which component is related to compartment
+#   * n_component: return the first n_component components
 # Return: a vector indicating the compartment level
 call_compartments <- function(gm, 
-                              input_as_cor = FALSE, 
-                              gene_density = NULL, 
-                              nuance = NULL,
+                              gene_density = NULL,
+                              valid_strips_pct = 0.9,
                               center = TRUE,
+                              scale = FALSE,
+                              pc_compartment = 1,
+                              n_component = 1,
                               rollmean_width = NULL) {
   m <- convert_to_matrix(gm)
-  invalid_values <- is.infinite(m) | is.na(m)
-  if (sum(invalid_values) > 0 & !is.null(nuance))
-    m[invalid_values] <- rnorm(sum(invalid_values), sd = nuance)
+  # invalid_values <- is.infinite(m) | is.na(m)
+  # if (sum(invalid_values) > 0 & !is.null(nuance))
+  #   m[invalid_values] <- rnorm(sum(invalid_values), sd = nuance)
   
-  comp <-
+  # Identify all-NA strips and remove them
+  # all_na <- 1:ncol(m) %>% map_lgl(~ m[, .] %>% is.na() %>% all())
+  
+  # Identify strips of which more than 20% are missing
+  invalid_strips <- 1:ncol(m) %>% map_lgl(~ (m[, .] %>% is.na() %>% mean) >= valid_strips_pct)
+  valid_m <- m[!invalid_strips, !invalid_strips]
+  
+  eigenvectors <-
     prcomp(
-      # if (input_as_cor) m else cor(m, use = "pairwise.complete.obs"),
-      if (input_as_cor) m else cor(m, use = "pairwise.complete.obs", method = "pearson"),
-           center = TRUE
-           # scale. = TRUE
-      )$rotation[, 1]
+      cor(valid_m, use = "pairwise.complete.obs", method = "pearson"), 
+      center = TRUE,
+      scale. = scale,
+      )$rotation  #[, 1]
+  
+  comp <- rep(NA, ncol(m))
+  comp[!invalid_strips] <- eigenvectors[, pc_compartment]
   
   bin_size <- attr(gm, "bin_size")
   gr <- attr(gm, "gr")
@@ -63,7 +74,7 @@ call_compartments <- function(gm,
   # Compare the compartment level with gene density and determine whether to flip
   if (!is.null(gene_density)) {
     gd_cnt <- .calc_num_genes(gr, gene_density)
-    if (cor(comp, gd_cnt) < 0)
+    if (cor(comp, gd_cnt, use = "complete.obs") < 0)
       comp <- -comp
   }
   
@@ -82,7 +93,12 @@ call_compartments <- function(gm,
       mutate(score = zoo::rollmean(score, rollmean_width, fill = NA))
   }
   
-  return(result)
+  # Extract the first n_component eigenvectors
+  pc <- matrix(rep(NA, ncol(m) * n_component), ncol = n_component)
+  pc[!invalid_strips,] <- eigenvectors[, 1:n_component]
+  pc %<>% data.frame() %>% as_tibble() %>% set_colnames(1:n_component %>% map_chr(~ paste0("PC", .)))
+  
+  return(bind_cols(result, pc))
 }
 
 
@@ -131,7 +147,7 @@ call_compartments_cli <- function(options) {
 }
 
 
-calc_pearson_correlation <- function(comp1, comp2, use = "everything") {
+calc_pearson_correlation <- function(comp1, comp2, use = "everything", method = "pearson") {
   # Check validity
   bin_size1 <- (comp1$end - comp1$start) %>% unique()
   bin_size2 <- (comp2$end - comp2$start) %>% unique()
@@ -148,7 +164,7 @@ calc_pearson_correlation <- function(comp1, comp2, use = "everything") {
   comp1 <- comp1 %>% filter(bin_idx %in% common_bins)
   comp2 <- comp2 %>% filter(bin_idx %in% common_bins)
   
-  cor(comp1$score, comp2$score, use = use)
+  cor(comp1$score, comp2$score, use = use, method = method)
 }
 
 
