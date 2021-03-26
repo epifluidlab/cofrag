@@ -188,9 +188,15 @@ fraglen_model <- function(bfp, gr, bin_size, interval1, interval2,
     bin_idx2 <- paired_bins[row_idx,]$bin2
     
     frag1 <- bfp[bin_idx1,]$frag[[1]][[1]]
+    n_frag1 <- length(frag1)
     bin_start1 <- bfp[bin_idx1,]$bin_start
     frag2 <- bfp[bin_idx2,]$frag[[1]][[1]]
+    n_frag2 <- length(frag2)
     bin_start2 <- bfp[bin_idx2,]$bin_start
+    
+    # Minimal # of fragments
+    if (min(n_frag1, n_frag2) < 100)
+      return(NULL)
     
     1:bootstrap %>% map_dfr(function(iter) {
       if (iter == 1 || iter %% 5 == 0)
@@ -205,8 +211,10 @@ fraglen_model <- function(bfp, gr, bin_size, interval1, interval2,
       }
       distance_func(frag1, frag2) %>% as_tibble() %>% mutate(
         bootstrap = as.integer(iter),
-        frag_cnt1 = length(frag1),
-        frag_cnt2 = length(frag2)
+        frag_cnt1 = n_frag1, # length(frag1),
+        frag_cnt2 = n_frag2, # length(frag2)
+        frag_ss_cnt1 = length(frag1),
+        frag_ss_cnt2 = length(frag2)
         )
     }) %>%
       mutate(
@@ -216,5 +224,6 @@ fraglen_model <- function(bfp, gr, bin_size, interval1, interval2,
         score = median(score2, na.rm = TRUE)
       ) %>%
       select(start1, start2, score, score2, bootstrap, frag_cnt1, frag_cnt2, everything())
-  })
+  }) %>%
+    na.omit()
 }

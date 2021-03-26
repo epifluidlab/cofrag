@@ -330,7 +330,6 @@ call_contact_matrix <-
             ),
             logger = logger_name
           )
-          
           model$entry(interval1, interval2, logger = logger_name)
         }
       stopCluster(cl)
